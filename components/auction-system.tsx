@@ -21,6 +21,7 @@ import {
   Play,
   Pause,
 } from 'lucide-react';
+import playerManifest from '../player-import.json';
 type Team = {
   code: string;
   name: string;
@@ -111,30 +112,22 @@ type AState = {
     groundSponsorLogo: string;
   };
 };
-const seedPlayers: Player[] = [
-  registeredPlayer('Rajendra', 35, '/players/rajendra.jpg'),
-  registeredPlayer('Pakshal Bagrecha', 21, '/players/pakshal-bagrecha.jpg'),
-  registeredPlayer('Devendra Mehta', 36, '/players/devendra-mehta.jpg'),
-  registeredPlayer('Kapil Mehta', 30, '/players/kapil-mehta.jpg'),
-  registeredPlayer('Tanishkumar Chopra', 18, '/players/tanishkumar-chopra.jpg'),
-  registeredPlayer('Dilip Mehata', 43, '/players/dilip-mehata.jpg'),
-  registeredPlayer('Daksh Jain', 18, '/players/daksh-jain.jpg'),
-  registeredPlayer('Chetan Bhansali', 39, '/players/chetan-bhansali.jpg'),
-  registeredPlayer('Akshay Sanklecha', 31, '/players/akshay-sanklecha.jpg'),
-  registeredPlayer('Rakesh Bagrecha', 39, '/players/rakesh-bagrecha.jpg'),
-  registeredPlayer('Vikas Jain', 32, '/players/vikas-jain.jpg'),
-  registeredPlayer('Jinesh Parekh', 23, '/players/jinesh-parekh.jpg'),
-  registeredPlayer('Bhavesh', 32, '/players/bhavesh.jpg'),
-  registeredPlayer('Krish Chopra', 23, '/players/krish-chopra.jpg'),
-  registeredPlayer('Pankaj Bagrecha', 48, '/players/pankaj-bagrecha.jpg'),
-  registeredPlayer('Kalpesh Jain', 41, '/players/kalpesh-jain.jpg'),
-  registeredPlayer('Vipul Mehta', 42, '/players/vipul-mehta.jpg'),
-  registeredPlayer('Dilip Chopra', 43, '/players/dilip-chopra.jpg'),
-  registeredPlayer('Chetan', 40, '/players/chetan.jpg'),
-  registeredPlayer('Ankit Parekh', 32, '/players/ankit-parekh.jpg'),
-  registeredPlayer('Dheeraj Chopra', 41, '/players/dheeraj-chopra.jpg'),
-  registeredPlayer('Pavankumar Chopra', 33, '/players/pavankumar-chopra.jpg'),
-];
+const seedPlayers: Player[] = playerManifest.map(({ name, age, file }) =>
+  registeredPlayer(name, age, '/players/' + file),
+);
+const playerIdentity = (name: string, age: number) =>
+  name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '') +
+  '|' +
+  age;
+const bundledPlayerImages = new Map(
+  playerManifest.map(({ name, age, file }) => [
+    playerIdentity(name, age),
+    '/players/' + file,
+  ]),
+);
 const teams: Team[] = [
   {
     code: 'CSK',
@@ -162,7 +155,7 @@ const teams: Team[] = [
   },
 ];
 const initial: AState = {
-  playerDatabaseVersion: 1,
+  playerDatabaseVersion: 2,
   player: 0,
   bid: MIN_BID,
   leader: -1,
@@ -1187,13 +1180,17 @@ function AdminConsole() {
     const photoUrl =
       'https://drive.google.com/uc?export=download&id=' +
       encodeURIComponent(driveId);
+    const sources = [
+      photoUrl,
+      '/api/player-photo?id=' + encodeURIComponent(driveId),
+    ];
     let blob: Blob | null = null;
     let lastError = 'Photo download failed';
     for (let attempt = 0; attempt < 4 && !blob; attempt += 1) {
       const controller = new AbortController();
       const timeout = window.setTimeout(() => controller.abort(), 15_000);
       try {
-        const response = await fetch(photoUrl, {
+        const response = await fetch(sources[attempt % sources.length], {
           cache: 'no-store',
           signal: controller.signal,
         });
@@ -1299,11 +1296,16 @@ function AdminConsole() {
           const index = nextPhotoIndex;
           nextPhotoIndex += 1;
           const row = rows[index];
-          let image = '/player-placeholder.svg';
-          try {
-            if (row.photo) image = await localizePlayerPhoto(row.photo);
-          } catch {
-            skippedPhotos += 1;
+          const bundledImage = bundledPlayerImages.get(
+            playerIdentity(row.name, row.age),
+          );
+          let image = bundledImage || '/player-placeholder.svg';
+          if (!bundledImage) {
+            try {
+              if (row.photo) image = await localizePlayerPhoto(row.photo);
+            } catch {
+              skippedPhotos += 1;
+            }
           }
           players[index] = {
             ...registeredPlayer(row.name, row.age, image),
@@ -1326,22 +1328,35 @@ function AdminConsole() {
         }
       };
       await Promise.all(
-        Array.from({ length: Math.min(4, rows.length) }, () =>
+        Array.from({ length: Math.min(10, rows.length) }, () =>
           downloadNextPhoto(),
         ),
       );
-      setDownloadedPlayers(players);
+      setS({
+        ...s,
+        player: 0,
+        activeSet: players[0]?.set || 'A',
+        bid: s.rules.minPoints,
+        leader: -1,
+        status: 'live',
+        bidHistory: [],
+        celebrationAt: 0,
+        players,
+      });
+      setDownloadedPlayers(null);
+      const successMessage =
+        rows.length +
+        ' players applied successfully. ' +
+        skippedPhotos +
+        ' photo(s) use the placeholder.';
       setDatabaseImport({
         running: false,
         completed: rows.length,
         total: rows.length,
-        message:
-          rows.length +
-          ' players downloaded. ' +
-          skippedPhotos +
-          ' photo(s) use the placeholder. Review and apply when ready.',
+        message: successMessage,
         error: false,
       });
+      window.alert(successMessage);
     } catch (error) {
       setDatabaseImport((current) => ({
         ...current,
@@ -2273,8 +2288,8 @@ function AdminConsole() {
                 <small>PLAYER DATABASE</small>
                 <h2>Published spreadsheet link</h2>
                 <p>
-                  Download player registrations from the published XLS or XLSX
-                  link. Unavailable photos use a generic player image.
+                  Download and immediately apply names, ages, and photos from
+                  the published XLS or XLSX link.
                 </p>
               </header>
               <div className="database-download-control">
@@ -2302,18 +2317,9 @@ function AdminConsole() {
                   onClick={downloadPlayerDatabase}
                 >
                   {databaseImport.running
-                    ? 'Downloading player database...'
-                    : 'Download player database'}
+                    ? 'Downloading and applying database...'
+                    : 'Download and apply player database'}
                 </button>
-                {downloadedPlayers && (
-                  <button
-                    type="button"
-                    className="apply-database-button"
-                    onClick={applyDownloadedDatabase}
-                  >
-                    Apply players to admin panel
-                  </button>
-                )}
                 {(databaseImport.running || databaseImport.message) && (
                   <div
                     className={

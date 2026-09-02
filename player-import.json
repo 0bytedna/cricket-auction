@@ -87,7 +87,7 @@
   {
     "name": "Dilip chopra",
     "age": 43,
-    "file": "dilip-chopra.jpg"
+    "file": "../player-placeholder.svg"
   },
   {
     "name": "Chetan",
@@ -208,5 +208,20 @@
     "name": "Pankaj Bagrecha",
     "age": 40,
     "file": "pankaj-bagrecha-2.jpg"
+  },
+  {
+    "name": "Gajendra Oswal",
+    "age": 44,
+    "file": "gajendra-oswal.jpg"
+  },
+  {
+    "name": "Chetan sanklecha",
+    "age": 41,
+    "file": "chetan-sanklecha.jpg"
+  },
+  {
+    "name": "Samkit sanklecha",
+    "age": 15,
+    "file": "samkit-sanklecha.jpg"
   }
 ]

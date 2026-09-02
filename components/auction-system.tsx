@@ -81,6 +81,7 @@ const registeredPlayer = (
   set: 'A',
 });
 type AState = {
+  playerDatabaseVersion: number;
   player: number;
   bid: number;
   leader: number;
@@ -161,6 +162,7 @@ const teams: Team[] = [
   },
 ];
 const initial: AState = {
+  playerDatabaseVersion: 1,
   player: 0,
   bid: MIN_BID,
   leader: -1,
@@ -168,7 +170,8 @@ const initial: AState = {
   activeSet: 'A',
   randomPlayerSelection: true,
   tickerSpeed: 5,
-  playerDatabaseUrl: '',
+  playerDatabaseUrl:
+    'https://docs.google.com/spreadsheets/d/e/2PACX-1vTJSkmTO0aDVXFo1oY7TlqOo7GkfAlrrlxl7mBgMhDKAe5rSPnQVHDDD5gxQ6ptpv7S1L5JMT_-kZyR/pub?output=xlsx',
   teams,
   players: seedPlayers,
   bidHistory: [],
@@ -265,7 +268,26 @@ const normalize = (raw: any): AState => {
       Number(rawRules.teamWallet) || TEAM_BUDGET,
     ),
   };
-  const migratedPlayers = raw.players.map((p: Player, i: number) => ({
+  const sourcePlayers =
+    raw.playerDatabaseVersion === initial.playerDatabaseVersion
+      ? raw.players
+      : seedPlayers.map((seed) => {
+          const saved = raw.players.find(
+            (player: Player) =>
+              player.name.trim().toLowerCase() ===
+              seed.name.trim().toLowerCase(),
+          );
+          return saved
+            ? {
+                ...seed,
+                result: saved.result,
+                soldTo: saved.soldTo,
+                soldPrice: saved.soldPrice,
+                set: saved.set,
+              }
+            : seed;
+        });
+  const migratedPlayers = sourcePlayers.map((p: Player, i: number) => ({
     ...p,
     base: rules.minPoints,
     set: p.set || (['A', 'B', 'C'][i % 3] as PlayerSet),
@@ -275,6 +297,7 @@ const normalize = (raw: any): AState => {
   return {
     ...initial,
     ...raw,
+    playerDatabaseVersion: initial.playerDatabaseVersion,
     players: migratedPlayers,
     bid: clampBid(
       current?.result === 'sold' ? current.soldPrice : raw.bid || current?.base,
@@ -1145,27 +1168,47 @@ function AdminConsole() {
     image.src = source;
   };
   const localizePlayerPhoto = async (source: string) => {
-    const slashMarker = '/d/';
-    const slashStart = source.indexOf(slashMarker);
-    const queryId = new URL(source).searchParams.get('id');
-    const slashId =
-      slashStart >= 0
-        ? source.slice(slashStart + slashMarker.length).split('/')[0]
-        : '';
-    const driveId = slashId || queryId;
-    const url = driveId
-      ? 'https://drive.google.com/uc?export=download&id=' + driveId
-      : source;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('Photo download failed');
-    const blob = await response.blob();
-    if (!blob.type.startsWith('image/'))
-      throw new Error('A photo link did not return an image');
+    const driveId = new URL(source).searchParams.get('id');
+    if (!driveId) throw new Error('Google Drive photo ID is missing');
+    const photoUrl =
+      'https://drive.google.com/uc?export=download&id=' +
+      encodeURIComponent(driveId);
+    let blob: Blob | null = null;
+    let lastError = 'Photo download failed';
+    for (let attempt = 0; attempt < 4 && !blob; attempt += 1) {
+      try {
+        const response = await fetch(photoUrl, {
+          cache: 'no-store',
+        });
+        if (!response.ok) {
+          lastError = 'Photo server returned ' + response.status;
+        } else {
+          const candidate = await response.blob();
+          if (candidate.type.startsWith('image/')) blob = candidate;
+          else lastError = 'The photo link did not return an image';
+        }
+      } catch (error) {
+        lastError =
+          error instanceof Error ? error.message : 'Photo download failed';
+      }
+      if (!blob)
+        await new Promise((resolve) =>
+          window.setTimeout(resolve, 600 * (attempt + 1)),
+        );
+    }
+    if (!blob) throw new Error(lastError);
     const objectUrl = URL.createObjectURL(blob);
     try {
       const image = new Image();
       image.src = objectUrl;
-      await image.decode();
+      try {
+        await image.decode();
+      } catch {
+        await new Promise<void>((resolve, reject) => {
+          image.onload = () => resolve();
+          image.onerror = () => reject(new Error('Photo could not be decoded'));
+        });
+      }
       const scale = Math.min(1, 1100 / Math.max(image.width, image.height));
       const canvas = document.createElement('canvas');
       canvas.width = Math.max(1, Math.round(image.width * scale));
@@ -1191,7 +1234,10 @@ function AdminConsole() {
     try {
       const response = await fetch(s.playerDatabaseUrl);
       if (!response.ok) throw new Error('Could not download the spreadsheet');
-      const XLSX = await import('xlsx');
+      const XLSXModule = await import('xlsx');
+      const XLSX = (
+        'read' in XLSXModule ? XLSXModule : XLSXModule.default
+      ) as typeof import('xlsx');
       const workbook = XLSX.read(await response.arrayBuffer(), {
         type: 'array',
       });
@@ -1207,12 +1253,7 @@ function AdminConsole() {
         headers.push(String(getCell(range.s.r, column)?.v || '').toLowerCase());
       const nameOffset = headers.findIndex((value) => value.includes('name'));
       const ageOffset = headers.findIndex((value) => value.includes('age'));
-      const photoOffset = headers.findIndex(
-        (value) =>
-          value.includes('photo') ||
-          value.includes('image') ||
-          value.includes('upload'),
-      );
+      const photoOffset = headers.findIndex((value) => value.includes('photo'));
       if (nameOffset < 0 || photoOffset < 0)
         throw new Error('Name or photo column was not found');
       const rows: Array<{ name: string; age: number; photo: string }> = [];
@@ -1223,10 +1264,11 @@ function AdminConsole() {
         const photoCell = getCell(row, range.s.c + photoOffset);
         const photo = String(photoCell?.l?.Target || photoCell?.v || '').trim();
         const age = Number(getCell(row, range.s.c + ageOffset)?.v || 0);
-        if (name && photo) rows.push({ name, age, photo });
+        if (name) rows.push({ name, age, photo });
       }
       if (!rows.length) throw new Error('No player registrations were found');
       const players: Player[] = [];
+      let skippedPhotos = 0;
       for (let index = 0; index < rows.length; index += 1) {
         const row = rows[index];
         setDatabaseImport({
@@ -1236,12 +1278,17 @@ function AdminConsole() {
           message: 'Downloading ' + index + ' of ' + rows.length + ' photos...',
           error: false,
         });
+        let image: string;
+        try {
+          image = row.photo
+            ? await localizePlayerPhoto(row.photo)
+            : '/player-placeholder.svg';
+        } catch {
+          image = '/player-placeholder.svg';
+          skippedPhotos += 1;
+        }
         players.push({
-          ...registeredPlayer(
-            row.name,
-            row.age,
-            await localizePlayerPhoto(row.photo),
-          ),
+          ...registeredPlayer(row.name, row.age, image),
           base: s.rules.minPoints,
           set: (['A', 'B', 'C'][index % 3] || 'A') as PlayerSet,
         });
@@ -1253,7 +1300,9 @@ function AdminConsole() {
         total: rows.length,
         message:
           rows.length +
-          ' players and photos downloaded. Review and apply when ready.',
+          ' players downloaded. ' +
+          skippedPhotos +
+          ' photo(s) use the placeholder. Review and apply when ready.',
         error: false,
       });
     } catch (error) {
@@ -2187,8 +2236,8 @@ function AdminConsole() {
                 <small>PLAYER DATABASE</small>
                 <h2>Published spreadsheet link</h2>
                 <p>
-                  Save the published XLS or XLSX URL used as the source for
-                  player registrations.
+                  Download player registrations from the published XLS or XLSX
+                  link. Unavailable photos use a generic player image.
                 </p>
               </header>
               <div className="database-download-control">

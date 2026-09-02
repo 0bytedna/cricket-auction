@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: siwanchi-premier-league
+    runtime: node
+    plan: free
+    buildCommand: pnpm install --frozen-lockfile && pnpm build
+    startCommand: pnpm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: 22.13.0
+      - key: PNPM_VERSION
+        value: 10.29.3

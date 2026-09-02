@@ -589,12 +589,7 @@ function SoldResultScreen({
   return (
     <main className={'sold-result-screen ' + (overlay ? 'overlay-sold' : '')}>
       <section className="sold-result-card">
-        <img
-          src={player.image}
-          alt={player.name}
-          decoding="sync"
-          fetchPriority="high"
-        />
+        <PlayerImage src={player.image} alt={player.name} />
         <h1>{player.name}</h1>
         <strong>SOLD</strong>
         <b>{pts(player.soldPrice || s.bid)}</b>
@@ -668,13 +663,7 @@ function LowerThird({ s, animate = false }: { s: AState; animate?: boolean }) {
               .join('')
               .slice(0, 2)}
           </b>
-          <img
-            src={p.image}
-            alt=""
-            onError={(event) => {
-              event.currentTarget.style.display = 'none';
-            }}
-          />
+          <PlayerImage src={p.image} alt={p.name} />
         </div>
         <div className="sold-plate">
           <TeamMark team={team} />
@@ -694,12 +683,7 @@ function LowerThird({ s, animate = false }: { s: AState; animate?: boolean }) {
       </div>
       <div className="lt-player">
         <div className="headshot">
-          <img
-            src={p.image}
-            alt={p.name}
-            decoding="sync"
-            fetchPriority="high"
-          />
+          <PlayerImage src={p.image} alt={p.name} />
         </div>
         <span>
           <b>{p.name}</b>
@@ -828,7 +812,7 @@ function StatsBoard({ s }: { s: AState }) {
         <>
           <div className="highest-player">
             <div className="rank">#1</div>
-            <img src={top.image} alt={top.name} />
+            <PlayerImage src={top.image} alt={top.name} />
             <div>
               <small>HIGHEST SOLD PLAYER</small>
               <h2>{top.name}</h2>
@@ -842,7 +826,7 @@ function StatsBoard({ s }: { s: AState }) {
             {sold.slice(1, 6).map((p, i) => (
               <article>
                 <em>#{i + 2}</em>
-                <img src={p.image} />
+                <PlayerImage src={p.image} alt={p.name} />
                 <span>
                   <b>{p.name}</b>
                   <small>
@@ -1014,12 +998,7 @@ export function Projector() {
       </header>
       <section className="projector-auction-stage">
         <div className="projector-auction-card">
-          <img
-            src={p.image}
-            alt={p.name}
-            decoding="sync"
-            fetchPriority="high"
-          />
+          <PlayerImage src={p.image} alt={p.name} />
           <div className="projector-player-details">
             <small>NOW BIDDING</small>
             <h1>{p.name}</h1>
@@ -1242,6 +1221,75 @@ function AdminConsole() {
     }
   };
   const downloadPlayerDatabase = async () => {
+    if (!s.playerDatabaseUrl || databaseImport.running) return;
+    setDatabaseImport({
+      running: true,
+      completed: 0,
+      total: 1,
+      message: 'Server is downloading fresh player data and photos...',
+      error: false,
+    });
+    try {
+      const response = await fetch('/api/refresh-player-database', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin-Password':
+            localStorage.getItem('boundaryx-admin-password') || '',
+        },
+        body: JSON.stringify({ url: s.playerDatabaseUrl }),
+      });
+      const result = (await response.json()) as {
+        players?: Array<{ name: string; age: number; image: string }>;
+        downloaded?: number;
+        placeholders?: number;
+        error?: string;
+      };
+      if (!response.ok || !result.players)
+        throw new Error(result.error || 'Server database refresh failed');
+      const players = result.players.map((player, index) => ({
+        ...registeredPlayer(player.name, player.age, player.image),
+        base: s.rules.minPoints,
+        set: (['A', 'B', 'C'][index % 3] || 'A') as PlayerSet,
+      }));
+      setS({
+        ...s,
+        player: 0,
+        activeSet: players[0]?.set || 'A',
+        bid: s.rules.minPoints,
+        leader: -1,
+        status: 'live',
+        bidHistory: [],
+        celebrationAt: 0,
+        players,
+      });
+      const message =
+        players.length +
+        ' players applied. ' +
+        (result.downloaded || 0) +
+        ' fresh photos; ' +
+        (result.placeholders || 0) +
+        ' placeholder(s).';
+      setDatabaseImport({
+        running: false,
+        completed: 1,
+        total: 1,
+        message,
+        error: false,
+      });
+      window.alert(message);
+    } catch (error) {
+      setDatabaseImport({
+        running: false,
+        completed: 0,
+        total: 1,
+        message:
+          error instanceof Error ? error.message : 'Database refresh failed',
+        error: true,
+      });
+    }
+  };
+  const downloadPlayerDatabaseLegacy = async () => {
     if (!s.playerDatabaseUrl || databaseImport.running) return;
     setDownloadedPlayers(null);
     setDatabaseImport({

@@ -436,6 +436,20 @@ function BrandMark({ src, label }: { src: string; label: string }) {
     </div>
   );
 }
+function PlayerImage({ src, alt = '' }: { src?: string; alt?: string }) {
+  return (
+    <img
+      key={src || 'placeholder'}
+      src={src || '/player-placeholder.svg'}
+      alt={alt}
+      onError={(event) => {
+        if (!event.currentTarget.src.endsWith('/player-placeholder.svg'))
+          event.currentTarget.src = '/player-placeholder.svg';
+        event.currentTarget.style.display = 'block';
+      }}
+    />
+  );
+}
 function TeamMark({
   team,
   className = '',
@@ -1176,9 +1190,12 @@ function AdminConsole() {
     let blob: Blob | null = null;
     let lastError = 'Photo download failed';
     for (let attempt = 0; attempt < 4 && !blob; attempt += 1) {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 15_000);
       try {
         const response = await fetch(photoUrl, {
           cache: 'no-store',
+          signal: controller.signal,
         });
         if (!response.ok) {
           lastError = 'Photo server returned ' + response.status;
@@ -1189,7 +1206,13 @@ function AdminConsole() {
         }
       } catch (error) {
         lastError =
-          error instanceof Error ? error.message : 'Photo download failed';
+          error instanceof Error && error.name === 'AbortError'
+            ? 'Photo download timed out'
+            : error instanceof Error
+              ? error.message
+              : 'Photo download failed';
+      } finally {
+        window.clearTimeout(timeout);
       }
       if (!blob)
         await new Promise((resolve) =>
@@ -1267,32 +1290,46 @@ function AdminConsole() {
         if (name) rows.push({ name, age, photo });
       }
       if (!rows.length) throw new Error('No player registrations were found');
-      const players: Player[] = [];
+      const players: Player[] = new Array(rows.length);
       let skippedPhotos = 0;
-      for (let index = 0; index < rows.length; index += 1) {
-        const row = rows[index];
-        setDatabaseImport({
-          running: true,
-          completed: index,
-          total: rows.length,
-          message: 'Downloading ' + index + ' of ' + rows.length + ' photos...',
-          error: false,
-        });
-        let image: string;
-        try {
-          image = row.photo
-            ? await localizePlayerPhoto(row.photo)
-            : '/player-placeholder.svg';
-        } catch {
-          image = '/player-placeholder.svg';
-          skippedPhotos += 1;
+      let completedPhotos = 0;
+      let nextPhotoIndex = 0;
+      const downloadNextPhoto = async () => {
+        while (nextPhotoIndex < rows.length) {
+          const index = nextPhotoIndex;
+          nextPhotoIndex += 1;
+          const row = rows[index];
+          let image = '/player-placeholder.svg';
+          try {
+            if (row.photo) image = await localizePlayerPhoto(row.photo);
+          } catch {
+            skippedPhotos += 1;
+          }
+          players[index] = {
+            ...registeredPlayer(row.name, row.age, image),
+            base: s.rules.minPoints,
+            set: (['A', 'B', 'C'][index % 3] || 'A') as PlayerSet,
+          };
+          completedPhotos += 1;
+          setDatabaseImport({
+            running: true,
+            completed: completedPhotos,
+            total: rows.length,
+            message:
+              'Downloading ' +
+              completedPhotos +
+              ' of ' +
+              rows.length +
+              ' photos...',
+            error: false,
+          });
         }
-        players.push({
-          ...registeredPlayer(row.name, row.age, image),
-          base: s.rules.minPoints,
-          set: (['A', 'B', 'C'][index % 3] || 'A') as PlayerSet,
-        });
-      }
+      };
+      await Promise.all(
+        Array.from({ length: Math.min(4, rows.length) }, () =>
+          downloadNextPhoto(),
+        ),
+      );
       setDownloadedPlayers(players);
       setDatabaseImport({
         running: false,
@@ -1680,7 +1717,7 @@ function AdminConsole() {
               ))}
             </div>
             <div className="admin-player">
-              <img src={p.image} alt={p.name} />
+              <PlayerImage src={p.image} alt={p.name} />
               {s.status !== 'live' && (
                 <div className={'admin-result-stamp ' + s.status}>
                   {s.status.toUpperCase()}
@@ -1936,7 +1973,7 @@ function AdminConsole() {
             {filteredPlayers.map(({ player: x, index: i }) => (
               <div className={'table-row ' + (s.player === i ? 'current' : '')}>
                 <span>
-                  <img src={x.image} />
+                  <PlayerImage src={x.image} alt={x.name} />
                   <b>
                     {x.name}
                     <small>
@@ -2274,7 +2311,7 @@ function AdminConsole() {
                     className="apply-database-button"
                     onClick={applyDownloadedDatabase}
                   >
-                    Use downloaded database
+                    Apply players to admin panel
                   </button>
                 )}
                 {(databaseImport.running || databaseImport.message) && (

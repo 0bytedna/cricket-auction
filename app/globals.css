@@ -2773,6 +2773,44 @@ a {
 .player-database-settings input {
   font-size: 13px;
 }
+.database-download-control {
+  display: grid;
+  gap: 12px;
+}
+.download-database-button,
+.apply-database-button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 900;
+}
+.download-database-button {
+  background: #cf2034;
+}
+.apply-database-button {
+  background: #18313c;
+}
+.download-database-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.database-progress {
+  display: grid;
+  gap: 7px;
+  color: #344c57;
+  font-size: 12px;
+  font-weight: 800;
+}
+.database-progress progress {
+  width: 100%;
+  height: 14px;
+  accent-color: #cf2034;
+}
+.database-progress.error {
+  color: #b51f31;
+}
 @media (max-width: 760px) {
   .player-database-settings {
     grid-template-columns: 1fr;

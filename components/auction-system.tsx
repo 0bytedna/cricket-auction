@@ -351,6 +351,25 @@ function useAuction() {
       c.close();
     };
   }, []);
+  useEffect(() => {
+    const images = s.players
+      .map((player) => player.image)
+      .filter((source): source is string => Boolean(source));
+    const preloaders = images.map((source) => {
+      const image = new Image();
+      image.decoding = 'async';
+      image.src = source;
+      if (typeof image.decode === 'function')
+        void image.decode().catch(() => {});
+      return image;
+    });
+    return () => {
+      preloaders.forEach((image) => {
+        image.onload = null;
+        image.onerror = null;
+      });
+    };
+  }, [s.players]);
   const update = (n: AState) => {
     setS(n);
     void savePersistentAuction(n);
@@ -540,7 +559,12 @@ function SoldResultScreen({
   return (
     <main className={'sold-result-screen ' + (overlay ? 'overlay-sold' : '')}>
       <section className="sold-result-card">
-        <img src={player.image} alt={player.name} />
+        <img
+          src={player.image}
+          alt={player.name}
+          decoding="sync"
+          fetchPriority="high"
+        />
         <h1>{player.name}</h1>
         <strong>SOLD</strong>
         <b>{pts(player.soldPrice || s.bid)}</b>
@@ -640,7 +664,12 @@ function LowerThird({ s, animate = false }: { s: AState; animate?: boolean }) {
       </div>
       <div className="lt-player">
         <div className="headshot">
-          <img src={p.image} alt={p.name} />
+          <img
+            src={p.image}
+            alt={p.name}
+            decoding="sync"
+            fetchPriority="high"
+          />
         </div>
         <span>
           <b>{p.name}</b>
@@ -955,7 +984,12 @@ export function Projector() {
       </header>
       <section className="projector-auction-stage">
         <div className="projector-auction-card">
-          <img src={p.image} alt={p.name} />
+          <img
+            src={p.image}
+            alt={p.name}
+            decoding="sync"
+            fetchPriority="high"
+          />
           <div className="projector-player-details">
             <small>NOW BIDDING</small>
             <h1>{p.name}</h1>
@@ -1012,7 +1046,15 @@ function AdminConsole() {
     ),
     [playerStatusFilter, setPlayerStatusFilter] = useState<
       'all' | Player['result']
-    >('all');
+    >('all'),
+    [databaseImport, setDatabaseImport] = useState({
+      running: false,
+      completed: 0,
+      total: 0,
+      message: '',
+      error: false,
+    }),
+    [downloadedPlayers, setDownloadedPlayers] = useState<Player[] | null>(null);
   const p = s.players[s.player],
     team = s.leader >= 0 ? s.teams[s.leader] : null;
   const auctionRunning =
@@ -1101,6 +1143,153 @@ function AdminConsole() {
     };
     image.onerror = () => URL.revokeObjectURL(source);
     image.src = source;
+  };
+  const localizePlayerPhoto = async (source: string) => {
+    const slashMarker = '/d/';
+    const slashStart = source.indexOf(slashMarker);
+    const queryId = new URL(source).searchParams.get('id');
+    const slashId =
+      slashStart >= 0
+        ? source.slice(slashStart + slashMarker.length).split('/')[0]
+        : '';
+    const driveId = slashId || queryId;
+    const url = driveId
+      ? 'https://drive.google.com/uc?export=download&id=' + driveId
+      : source;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Photo download failed');
+    const blob = await response.blob();
+    if (!blob.type.startsWith('image/'))
+      throw new Error('A photo link did not return an image');
+    const objectUrl = URL.createObjectURL(blob);
+    try {
+      const image = new Image();
+      image.src = objectUrl;
+      await image.decode();
+      const scale = Math.min(1, 1100 / Math.max(image.width, image.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(image.width * scale));
+      canvas.height = Math.max(1, Math.round(image.height * scale));
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Photo could not be processed');
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL('image/webp', 0.84);
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  };
+  const downloadPlayerDatabase = async () => {
+    if (!s.playerDatabaseUrl || databaseImport.running) return;
+    setDownloadedPlayers(null);
+    setDatabaseImport({
+      running: true,
+      completed: 0,
+      total: 0,
+      message: 'Downloading spreadsheet...',
+      error: false,
+    });
+    try {
+      const response = await fetch(s.playerDatabaseUrl);
+      if (!response.ok) throw new Error('Could not download the spreadsheet');
+      const XLSX = await import('xlsx');
+      const workbook = XLSX.read(await response.arrayBuffer(), {
+        type: 'array',
+      });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      if (!sheet || !sheet['!ref']) throw new Error('The spreadsheet is empty');
+      const range = XLSX.utils.decode_range(sheet['!ref']);
+      const getCell = (row: number, column: number) =>
+        sheet[XLSX.utils.encode_cell({ r: row, c: column })] as
+          | { v?: unknown; l?: { Target?: string } }
+          | undefined;
+      const headers = [];
+      for (let column = range.s.c; column <= range.e.c; column += 1)
+        headers.push(String(getCell(range.s.r, column)?.v || '').toLowerCase());
+      const nameOffset = headers.findIndex((value) => value.includes('name'));
+      const ageOffset = headers.findIndex((value) => value.includes('age'));
+      const photoOffset = headers.findIndex(
+        (value) =>
+          value.includes('photo') ||
+          value.includes('image') ||
+          value.includes('upload'),
+      );
+      if (nameOffset < 0 || photoOffset < 0)
+        throw new Error('Name or photo column was not found');
+      const rows: Array<{ name: string; age: number; photo: string }> = [];
+      for (let row = range.s.r + 1; row <= range.e.r; row += 1) {
+        const name = String(
+          getCell(row, range.s.c + nameOffset)?.v || '',
+        ).trim();
+        const photoCell = getCell(row, range.s.c + photoOffset);
+        const photo = String(photoCell?.l?.Target || photoCell?.v || '').trim();
+        const age = Number(getCell(row, range.s.c + ageOffset)?.v || 0);
+        if (name && photo) rows.push({ name, age, photo });
+      }
+      if (!rows.length) throw new Error('No player registrations were found');
+      const players: Player[] = [];
+      for (let index = 0; index < rows.length; index += 1) {
+        const row = rows[index];
+        setDatabaseImport({
+          running: true,
+          completed: index,
+          total: rows.length,
+          message: 'Downloading ' + index + ' of ' + rows.length + ' photos...',
+          error: false,
+        });
+        players.push({
+          ...registeredPlayer(
+            row.name,
+            row.age,
+            await localizePlayerPhoto(row.photo),
+          ),
+          base: s.rules.minPoints,
+          set: (['A', 'B', 'C'][index % 3] || 'A') as PlayerSet,
+        });
+      }
+      setDownloadedPlayers(players);
+      setDatabaseImport({
+        running: false,
+        completed: rows.length,
+        total: rows.length,
+        message:
+          rows.length +
+          ' players and photos downloaded. Review and apply when ready.',
+        error: false,
+      });
+    } catch (error) {
+      setDatabaseImport((current) => ({
+        ...current,
+        running: false,
+        message:
+          error instanceof Error ? error.message : 'Database download failed',
+        error: true,
+      }));
+    }
+  };
+  const applyDownloadedDatabase = () => {
+    if (
+      !downloadedPlayers ||
+      !window.confirm(
+        'Use the downloaded player database? This replaces the current player list and clears existing player results and bids.',
+      )
+    )
+      return;
+    setS({
+      ...s,
+      player: 0,
+      activeSet: downloadedPlayers[0]?.set || 'A',
+      bid: s.rules.minPoints,
+      leader: -1,
+      status: 'live',
+      bidHistory: [],
+      celebrationAt: 0,
+      players: downloadedPlayers,
+    });
+    setDownloadedPlayers(null);
+    setDatabaseImport((current) => ({
+      ...current,
+      message: current.total + ' players are ready for auction.',
+    }));
   };
   const addTeam = () => {
     const index = s.teams.length;
@@ -2002,19 +2191,58 @@ function AdminConsole() {
                   player registrations.
                 </p>
               </header>
-              <label>
-                <span>Published Google Sheets XLS URL</span>
-                <input
-                  type="url"
-                  inputMode="url"
-                  placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=xlsx"
-                  value={s.playerDatabaseUrl}
-                  onChange={(event) =>
-                    setS({ ...s, playerDatabaseUrl: event.target.value.trim() })
-                  }
-                />
-                <small>Saved automatically on this device.</small>
-              </label>
+              <div className="database-download-control">
+                <label>
+                  <span>Published Google Sheets XLS URL</span>
+                  <input
+                    type="url"
+                    inputMode="url"
+                    placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=xlsx"
+                    value={s.playerDatabaseUrl}
+                    disabled={databaseImport.running}
+                    onChange={(event) =>
+                      setS({
+                        ...s,
+                        playerDatabaseUrl: event.target.value.trim(),
+                      })
+                    }
+                  />
+                  <small>Saved automatically on this device.</small>
+                </label>
+                <button
+                  type="button"
+                  className="download-database-button"
+                  disabled={!s.playerDatabaseUrl || databaseImport.running}
+                  onClick={downloadPlayerDatabase}
+                >
+                  {databaseImport.running
+                    ? 'Downloading player database...'
+                    : 'Download player database'}
+                </button>
+                {downloadedPlayers && (
+                  <button
+                    type="button"
+                    className="apply-database-button"
+                    onClick={applyDownloadedDatabase}
+                  >
+                    Use downloaded database
+                  </button>
+                )}
+                {(databaseImport.running || databaseImport.message) && (
+                  <div
+                    className={
+                      'database-progress ' +
+                      (databaseImport.error ? 'error' : '')
+                    }
+                  >
+                    <progress
+                      max={Math.max(1, databaseImport.total)}
+                      value={databaseImport.completed}
+                    />
+                    <span>{databaseImport.message}</span>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="branding-settings">
               <header>

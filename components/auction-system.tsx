@@ -22,6 +22,7 @@ import {
   Pause,
 } from 'lucide-react';
 import playerManifest from '../player-import.json';
+import { cachePlayerPhotos, loadPlayerPhoto, removeOldPlayerPhotos } from './player-photo-cache';
 type Team = {
   code: string;
   name: string;
@@ -400,20 +401,7 @@ function useAuction() {
     const images = s.players
       .map((player) => player.image)
       .filter((source): source is string => Boolean(source));
-    const preloaders = images.map((source) => {
-      const image = new Image();
-      image.decoding = 'async';
-      image.src = source;
-      if (typeof image.decode === 'function')
-        void image.decode().catch(() => {});
-      return image;
-    });
-    return () => {
-      preloaders.forEach((image) => {
-        image.onload = null;
-        image.onerror = null;
-      });
-    };
+    void cachePlayerPhotos(images);
   }, [s.players]);
   const update = (n: AState) => {
     setS(n);
@@ -460,10 +448,33 @@ function BrandMark({ src, label }: { src: string; label: string }) {
   );
 }
 function PlayerImage({ src, alt = '' }: { src?: string; alt?: string }) {
+  const [ready, setReady] = useState<{ source: string; url: string } | null>(null);
+  const source = src || '/player-placeholder.svg';
+  useEffect(() => {
+    let active = true;
+    let objectUrl = '';
+    void (async () => {
+      try {
+        const blob = await loadPlayerPhoto(source);
+        if (!active) return;
+        objectUrl = URL.createObjectURL(blob);
+        const image = new Image();
+        image.src = objectUrl;
+        await image.decode();
+        if (active) setReady({ source, url: objectUrl });
+      } catch {
+        if (active) setReady({ source, url: '/player-placeholder.svg' });
+      }
+    })();
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [source]);
   return (
     <img
       key={src || 'placeholder'}
-      src={src || '/player-placeholder.svg'}
+      src={ready?.source === source ? ready.url : '/player-placeholder.svg'}
       alt={alt}
       onError={(event) => {
         if (!event.currentTarget.src.endsWith('/player-placeholder.svg'))
@@ -1282,6 +1293,14 @@ function AdminConsole() {
         base: s.rules.minPoints,
         set: (['A', 'B', 'C'][index % 3] || 'A') as PlayerSet,
       }));
+      const photoSources = players.map(player => player.image);
+      await removeOldPlayerPhotos(photoSources).catch(() => {});
+      const cacheResult = await cachePlayerPhotos(photoSources, (completed, total) => {
+        setDatabaseImport({
+          running: true, completed, total, error: false,
+          message: 'Saving photos on this device: ' + completed + ' / ' + total,
+        });
+      });
       setS({
         ...s,
         player: 0,
@@ -1299,7 +1318,8 @@ function AdminConsole() {
         (result.downloaded || 0) +
         ' fresh photos; ' +
         (result.placeholders || 0) +
-        ' placeholder(s).';
+        ' placeholder(s).' +
+        (cacheResult.failed ? ' Some device photo downloads failed; they will retry when displayed.' : ' Photos prepared on this device.');
       setDatabaseImport({
         running: false,
         completed: 1,

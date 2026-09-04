@@ -184,6 +184,47 @@ const initial: AState = {
   },
 };
 const key = 'boundaryx-auction-state-v3';
+const settingsKey = 'spl-auction-settings-v1';
+const settingsSnapshot = (state: AState) => ({
+  rules: state.rules,
+  teams: state.teams,
+  branding: state.branding,
+  playerDatabaseUrl: state.playerDatabaseUrl,
+  randomPlayerSelection: state.randomPlayerSelection,
+  activeSet: state.activeSet,
+  tickerSpeed: state.tickerSpeed,
+  obsMode: state.obsMode,
+  projectorMode: state.projectorMode,
+  celebrationMuted: state.celebrationMuted,
+  celebration: state.celebration,
+});
+const readLocalSettings = (): Partial<ReturnType<typeof settingsSnapshot>> => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(settingsKey) || 'null');
+    if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return {};
+    const result: Record<string, unknown> = {};
+    for (const field of Object.keys(settingsSnapshot(initial))) {
+      if (saved[field] !== undefined) result[field] = saved[field];
+    }
+    return result;
+  } catch {
+    return {};
+  }
+};
+let settingsStorageWarningShown = false;
+const saveLocalSettings = (state: AState) => {
+  try {
+    localStorage.setItem(settingsKey, JSON.stringify(settingsSnapshot(state)));
+    settingsStorageWarningShown = false;
+  } catch {
+    if (!settingsStorageWarningShown) {
+      settingsStorageWarningShown = true;
+      window.alert(
+        'Settings could not be saved to localStorage because browser storage is full or unavailable. The app will still try its IndexedDB backup.',
+      );
+    }
+  }
+};
 const auctionDb = 'siwanchi-premier-league';
 const auctionStore = 'auction-state';
 const openAuctionDb = () =>
@@ -261,27 +302,13 @@ const normalize = (raw: any): AState => {
       Number(rawRules.teamWallet) || TEAM_BUDGET,
     ),
   };
-  const sourcePlayers =
-    raw.playerDatabaseVersion === initial.playerDatabaseVersion
-      ? raw.players
-      : seedPlayers.map((seed) => {
-          const saved = raw.players.find(
-            (player: Player) =>
-              player.name.trim().toLowerCase() ===
-              seed.name.trim().toLowerCase(),
-          );
-          return saved
-            ? {
-                ...seed,
-                result: saved.result,
-                soldTo: saved.soldTo,
-                soldPrice: saved.soldPrice,
-                set: saved.set,
-              }
-            : seed;
-        });
+  // Saved player records are authoritative; never replace them with build-time seeds.
+  const sourcePlayers = raw.players;
   const migratedPlayers = sourcePlayers.map((p: Player, i: number) => ({
     ...p,
+    image: p.image?.startsWith('/players/') || p.image === '/player-placeholder.svg'
+      ? p.image
+      : '/player-placeholder.svg',
     base: rules.minPoints,
     set: p.set || (['A', 'B', 'C'][i % 3] as PlayerSet),
     soldPrice: p.result === 'sold' ? clampBid(p.soldPrice || p.base, rules) : 0,
@@ -349,16 +376,18 @@ function useAuction() {
     void (async () => {
       const persistent = await loadPersistentAuction();
       if (!active) return;
-      if (persistent) {
-        setS(normalize(persistent));
-        return;
-      }
+      let restored: AState = persistent || initial;
       try {
-        const saved = localStorage.getItem(key);
-        if (saved) setS(normalize(JSON.parse(saved)));
+        if (!persistent) {
+          const saved = localStorage.getItem(key);
+          if (saved) restored = JSON.parse(saved);
+        }
       } catch {
         // Keep the safe initial state if legacy storage is unreadable.
       }
+      const hydrated = normalize({ ...restored, ...readLocalSettings() });
+      setS(hydrated);
+      saveLocalSettings(hydrated);
     })();
     const c = new BroadcastChannel(key);
     c.onmessage = (e) => setS(normalize(e.data));
@@ -388,6 +417,7 @@ function useAuction() {
   }, [s.players]);
   const update = (n: AState) => {
     setS(n);
+    saveLocalSettings(n);
     void savePersistentAuction(n);
     try {
       localStorage.setItem(key, JSON.stringify(n));

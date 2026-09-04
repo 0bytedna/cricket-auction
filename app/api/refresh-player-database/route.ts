@@ -2,6 +2,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import * as XLSX from 'xlsx';
 
+let refreshing = false;
+
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const slugify = (name: string) =>
   name
@@ -15,7 +17,7 @@ const downloadPhoto = async (id: string) => {
     'https://drive.google.com/uc?export=download&id=' + encodeURIComponent(id);
   for (let attempt = 0; attempt < 4; attempt += 1) {
     try {
-      const response = await fetch(url, { redirect: 'follow' });
+      const response = await fetch(url, { redirect: 'follow', cache: 'no-store', signal: AbortSignal.timeout(20000) });
       const type = response.headers.get('content-type') || '';
       if (response.ok && type.startsWith('image/'))
         return {
@@ -46,6 +48,9 @@ export async function POST(request: Request) {
       { status: 401 },
     );
 
+  if (refreshing)
+    return Response.json({ error: 'A database download is already running.' }, { status: 409 });
+  refreshing = true;
   let stagedDirectory = '';
   try {
     const body = (await request.json()) as { url?: string };
@@ -60,7 +65,19 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     source.searchParams.set('cache', Date.now().toString());
-    const response = await fetch(source);
+    const clientRoot =
+      process.env.NODE_ENV === 'production'
+        ? path.resolve('dist/client')
+        : path.resolve('public');
+    const liveDirectory = path.resolve(clientRoot, 'players');
+    if (path.dirname(liveDirectory) !== clientRoot)
+      throw new Error('Unsafe player photo path.');
+    // Explicit authenticated refresh discards old photos before any download.
+    await fs.rm(liveDirectory, { recursive: true, force: true });
+    const databasePath = path.resolve('data', 'downloaded-player-database.json');
+    await fs.mkdir(path.dirname(databasePath), { recursive: true });
+    await fs.rm(databasePath, { force: true });
+    const response = await fetch(source, { cache: 'no-store', signal: AbortSignal.timeout(60000) });
     if (!response.ok)
       throw new Error('Spreadsheet returned ' + response.status);
     const workbook = XLSX.read(await response.arrayBuffer(), { type: 'array' });
@@ -81,11 +98,6 @@ export async function POST(request: Request) {
       .filter((player) => player.name);
     if (!registrations.length) throw new Error('No players were found.');
 
-    const clientRoot =
-      process.env.NODE_ENV === 'production'
-        ? path.resolve('dist/client')
-        : path.resolve('public');
-    const liveDirectory = path.resolve(clientRoot, 'players');
     stagedDirectory = path.resolve(clientRoot, 'players-refresh-' + Date.now());
     if (
       path.dirname(liveDirectory) !== clientRoot ||
@@ -112,7 +124,8 @@ export async function POST(request: Request) {
         used.add(slug);
         let image = '/player-placeholder.svg';
         try {
-          const id = new URL(player.photo).searchParams.get('id');
+          const photoUrl = new URL(player.photo);
+          const id = photoUrl.searchParams.get('id') || photoUrl.pathname.match(/\/d\/([^/]+)/)?.[1];
           const photo = id ? await downloadPhoto(id) : null;
           if (photo) {
             const file = slug + '.' + photo.extension;
@@ -132,8 +145,10 @@ export async function POST(request: Request) {
       ),
     );
 
-    await fs.rm(liveDirectory, { recursive: true, force: true });
     await fs.rename(stagedDirectory, liveDirectory);
+    await fs.writeFile(databasePath, JSON.stringify({
+      players, downloaded, placeholders, downloadedAt: new Date().toISOString(),
+    }));
     return Response.json({ players, downloaded, placeholders });
   } catch (error) {
     if (stagedDirectory)
@@ -147,5 +162,7 @@ export async function POST(request: Request) {
       },
       { status: 500 },
     );
+  } finally {
+    refreshing = false;
   }
 }

@@ -334,7 +334,10 @@ const normalize = (raw: any): AState => {
   const sourcePlayers = raw.players;
   const migratedPlayers = sourcePlayers.map((p: Player, i: number) => ({
     ...p,
-    image: p.image?.startsWith('/players/') || p.image === '/player-placeholder.svg'
+    image:
+      p.image?.startsWith('/players/') ||
+      p.image?.startsWith('/api/player-photo') ||
+      p.image === '/player-placeholder.svg'
       ? p.image
       : '/player-placeholder.svg',
     base: rules.minPoints,
@@ -1879,8 +1882,17 @@ function AdminConsole() {
       s.playerNavigationPosition,
       history.length - 1,
     );
-    if (position < history.length - 1) {
-      navigateTo(history[position + 1], history, position + 1);
+    const nextHistoryPosition = history.findIndex(
+      (index, historyPosition) =>
+        historyPosition > position &&
+        s.players[index]?.set === s.activeSet,
+    );
+    if (nextHistoryPosition >= 0) {
+      navigateTo(
+        history[nextHistoryPosition],
+        history,
+        nextHistoryPosition,
+      );
       return;
     }
     if (!pendingInSet.length) return;
@@ -1906,8 +1918,19 @@ function AdminConsole() {
       ? s.playerNavigationHistory
       : [s.player];
     const position = Math.min(s.playerNavigationPosition, history.length - 1);
-    if (position > 0)
-      navigateTo(history[position - 1], history, position - 1);
+    let previousHistoryPosition = -1;
+    for (let index = position - 1; index >= 0; index -= 1) {
+      if (s.players[history[index]]?.set === s.activeSet) {
+        previousHistoryPosition = index;
+        break;
+      }
+    }
+    if (previousHistoryPosition >= 0)
+      navigateTo(
+        history[previousHistoryPosition],
+        history,
+        previousHistoryPosition,
+      );
   };
   const switchSet = (set: PlayerSet) => {
     const history = s.playerNavigationHistory.slice(

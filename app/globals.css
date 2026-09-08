@@ -2373,12 +2373,12 @@ a {
   }
 }
 
-/* Three-set auction controls and portrait-safe player artwork */
+/* Four-set auction controls and portrait-safe player artwork */
 .set-switcher {
   margin-bottom: 14px;
   padding: 12px 14px;
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) repeat(3, 130px);
+  grid-template-columns: minmax(220px, 1fr) repeat(4, minmax(105px, 130px));
   align-items: center;
   gap: 9px;
   border: 1px solid #d6e0e4;
@@ -2512,7 +2512,7 @@ a {
 }
 @media (max-width: 920px) {
   .set-switcher {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
   .set-switcher > span {
     grid-column: 1 / -1;

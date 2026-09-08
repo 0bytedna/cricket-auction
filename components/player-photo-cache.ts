@@ -13,7 +13,9 @@ async function openPhotoCache() {
 export function loadPlayerPhoto(source: string): Promise<Blob> {
   const url = new URL(source, window.location.origin);
   if (url.origin !== window.location.origin ||
-      !(url.pathname.startsWith('/players/') || url.pathname === '/player-placeholder.svg')) {
+      !(url.pathname.startsWith('/players/') ||
+        url.pathname === '/api/player-photo' ||
+        url.pathname === '/player-placeholder.svg')) {
     return Promise.reject(new Error('Invalid local player photo'));
   }
   const key = url.href; // Includes refresh version; old photos cannot satisfy new requests.
@@ -44,7 +46,7 @@ export async function cachePlayerPhotos(
   let cursor = 0;
   let completed = 0;
   let failed = 0;
-  await Promise.all(Array.from({ length: Math.min(4, unique.length) }, async () => {
+  await Promise.all(Array.from({ length: Math.min(10, unique.length) }, async () => {
     while (cursor < unique.length) {
       const source = unique[cursor++];
       try { await loadPlayerPhoto(source); } catch { failed++; }

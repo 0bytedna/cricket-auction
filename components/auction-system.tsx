@@ -2487,7 +2487,7 @@ function AdminConsole() {
           <div className="player-table">
             <div className="table-row labels">
               <span>PLAYER</span>
-              <span>BASE</span>
+              <span>SET</span>
               <span>STATUS</span>
               <span>TEAM / PRICE</span>
               <span>ACTION</span>
@@ -2504,7 +2504,6 @@ function AdminConsole() {
                   </b>
                 </span>
                 <span className="player-base-set">
-                  <b>{pts(x.base)}</b>
                   <select
                     value={x.set}
                     onChange={(event) =>

@@ -1760,11 +1760,15 @@ function AdminConsole() {
     });
   };
   const send = (i: number) => {
-    const history = s.playerNavigationHistory.slice(
-      0,
-      s.playerNavigationPosition + 1,
-    );
-    if (history[history.length - 1] !== i) history.push(i);
+    const history = s.playerNavigationHistory.length
+      ? [...s.playerNavigationHistory]
+      : [s.player];
+    const currentHistoryPlayer = history[s.playerNavigationPosition];
+    if (currentHistoryPlayer !== i) history.push(i);
+    const historyPosition =
+      currentHistoryPlayer === i
+        ? s.playerNavigationPosition
+        : history.length - 1;
     setS({
       ...s,
       player: i,
@@ -1775,7 +1779,7 @@ function AdminConsole() {
       bidHistory: [],
       celebrationAt: 0,
       playerNavigationHistory: history,
-      playerNavigationPosition: history.length - 1,
+      playerNavigationPosition: historyPosition,
     });
   };
   const bid = (i: number) => {
@@ -1933,31 +1937,43 @@ function AdminConsole() {
       );
   };
   const switchSet = (set: PlayerSet) => {
-    const history = s.playerNavigationHistory.slice(
-      0,
-      s.playerNavigationPosition + 1,
-    );
+    if (set === s.activeSet) return;
+    const history = s.playerNavigationHistory.length
+      ? [...s.playerNavigationHistory]
+      : [s.player];
     const alreadyShown = new Set(
       history.filter((index) => s.players[index]?.set === set),
     );
-    const first = s.players.findIndex(
-      (player, index) =>
-        player.set === set &&
-        player.result === 'pending' &&
-        !alreadyShown.has(index),
-    );
-    if (first >= 0) {
-      const nextHistory =
-        history[history.length - 1] === first ? history : [...history, first];
-      navigateTo(first, nextHistory, nextHistory.length - 1);
+    const available = s.players
+      .map((player, index) => ({ player, index }))
+      .filter(
+        ({ player, index }) =>
+          player.set === set &&
+          player.result === 'pending' &&
+          !alreadyShown.has(index),
+      )
+      .map(({ index }) => index);
+    if (available.length) {
+      const selected = s.randomPlayerSelection
+        ? available[Math.floor(Math.random() * available.length)]
+        : available[0];
+      const nextHistory = [...history, selected];
+      navigateTo(selected, nextHistory, nextHistory.length - 1);
+      return;
     }
-    else
-      setS({
-        ...s,
-        activeSet: set,
-        playerNavigationHistory: history,
-        playerNavigationPosition: Math.max(0, history.length - 1),
-      });
+    for (let position = history.length - 1; position >= 0; position -= 1) {
+      if (s.players[history[position]]?.set === set) {
+        navigateTo(history[position], history, position);
+        return;
+      }
+    }
+    const fallback = s.players.findIndex((player) => player.set === set);
+    if (fallback >= 0) {
+      const nextHistory = [...history, fallback];
+      navigateTo(fallback, nextHistory, nextHistory.length - 1);
+      return;
+    }
+    setS({ ...s, activeSet: set });
   };
   const eligibleLuckyTeams = s.teams
     .map((team, index) => ({ team, index }))
@@ -2006,11 +2022,15 @@ function AdminConsole() {
     if (!luckyWheel || luckyWheel.winner < 0) return;
     const playerIndex = luckyWheel.playerIndex;
     const winner = luckyWheel.winner;
-    const history = s.playerNavigationHistory.slice(
-      0,
-      s.playerNavigationPosition + 1,
-    );
-    if (history[history.length - 1] !== playerIndex) history.push(playerIndex);
+    const history = s.playerNavigationHistory.length
+      ? [...s.playerNavigationHistory]
+      : [s.player];
+    const currentHistoryPlayer = history[s.playerNavigationPosition];
+    if (currentHistoryPlayer !== playerIndex) history.push(playerIndex);
+    const historyPosition =
+      currentHistoryPlayer === playerIndex
+        ? s.playerNavigationPosition
+        : history.length - 1;
     setS({
       ...s,
       player: playerIndex,
@@ -2022,7 +2042,7 @@ function AdminConsole() {
       celebrationAt: Date.now(),
       luckyWheelSpin: null,
       playerNavigationHistory: history,
-      playerNavigationPosition: history.length - 1,
+      playerNavigationPosition: historyPosition,
       players: s.players.map((player, index) =>
         index === playerIndex
           ? {

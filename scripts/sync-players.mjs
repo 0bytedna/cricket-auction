@@ -15,6 +15,11 @@ const slugify = (name) =>
     .normalize('NFKD')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '') || 'player';
+const playerSets = ['A+', 'A', 'B', 'C'];
+const parsePlayerSet = (value) => {
+  const normalized = String(value || '').trim().toUpperCase().replace(/\s+/g, '');
+  return playerSets.includes(normalized) ? normalized : 'C';
+};
 
 const downloadPhoto = async (id) => {
   const url =
@@ -60,6 +65,7 @@ const registrations = rows
       name: String(find('name') || '').trim(),
       age: Number(find('age') || 0),
       photo: String(find('photo') || '').trim(),
+      set: parsePlayerSet(find('set')),
     };
   })
   .filter((player) => player.name);
@@ -90,7 +96,12 @@ const worker = async () => {
     } catch {
       placeholders += 1;
     }
-    manifest[index] = { name: player.name, age: player.age, file };
+    manifest[index] = {
+      name: player.name,
+      age: player.age,
+      set: player.set,
+      file,
+    };
     process.stdout.write(
       '\rPlayers prepared: ' +
         (downloaded + placeholders) +

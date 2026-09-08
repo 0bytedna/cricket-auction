@@ -3881,7 +3881,7 @@ a {
   min-width: 1050px;
   grid-template-columns:
     minmax(250px, 2fr) minmax(125px, 0.7fr) minmax(135px, 0.8fr)
-    minmax(320px, 1.4fr) minmax(150px, 0.8fr);
+    minmax(320px, 1.4fr) minmax(205px, 0.9fr);
   font-size: 13px;
 }
 .manage-page .player-table {
@@ -3935,6 +3935,265 @@ a {
   min-height: 40px;
   padding: 0 13px;
   font-size: 12px;
+}
+.player-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.manage-page .table-row > span:nth-child(5) .lucky-wheel-button {
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  min-height: 42px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  line-height: 0;
+  border-color: #d49b16;
+  color: #9b6800;
+}
+.lucky-wheel-button svg {
+  display: block;
+  flex: none;
+  width: 21px;
+  height: 21px;
+  stroke-width: 2.35;
+}
+.manage-page .player-row-actions button:disabled {
+  border-color: #cbd2d6 !important;
+  background: #edf0f2 !important;
+  color: #98a2a8 !important;
+  opacity: 1;
+  cursor: not-allowed;
+}
+.lucky-wheel-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #071820b8;
+  backdrop-filter: blur(8px);
+}
+.lucky-wheel-dialog {
+  position: relative;
+  width: min(560px, 100%);
+  padding: 34px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 24px 80px #0007;
+  color: #152b39;
+  text-align: center;
+}
+.lucky-wheel-dialog > small {
+  color: #8c6a12;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+}
+.lucky-wheel-dialog h2 {
+  margin: 8px 36px 18px;
+  font-size: 28px;
+}
+.lucky-wheel-dialog p {
+  margin: 18px auto;
+  color: #586773;
+  font-size: 15px;
+  line-height: 1.55;
+}
+.lucky-wheel-close {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  background: transparent;
+  color: #52606a;
+  font-size: 28px;
+}
+.lucky-wheel-disc {
+  width: 150px;
+  height: 150px;
+  margin: 0 auto;
+  display: grid;
+  place-items: center;
+  border: 10px solid #e1ad29;
+  border-radius: 50%;
+  background: conic-gradient(#b91f36 0 12.5%, #fff 0 25%, #e1ad29 0 37.5%, #243d4b 0 50%, #fff 0 62.5%, #b91f36 0 75%, #e1ad29 0 87.5%, #243d4b 0);
+  box-shadow: inset 0 0 0 5px #fff, 0 12px 30px #132c3b35;
+}
+.lucky-wheel-disc svg {
+  width: 66px;
+  height: 66px;
+  padding: 12px;
+  border-radius: 50%;
+  background: #fff;
+  color: #172f3d;
+}
+.lucky-wheel-disc.spinning {
+  animation: lucky-wheel-spin 0.48s linear infinite;
+}
+@keyframes lucky-wheel-spin {
+  to { transform: rotate(360deg); }
+}
+.lucky-wheel-result {
+  display: block;
+  min-height: 34px;
+  font-size: 23px;
+}
+.lucky-wheel-actions {
+  margin-top: 22px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+.lucky-wheel-actions button {
+  min-height: 46px;
+  padding: 0 19px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 7px;
+  background: #c91f3a;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 900;
+}
+.lucky-wheel-actions button:last-child {
+  background: #172f3d;
+}
+.lucky-wheel-actions button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+.lucky-wheel-actions svg {
+  width: 19px;
+}
+.lucky-wheel-empty {
+  padding: 18px;
+  background: #fff4f4;
+  color: #9a2435 !important;
+  font-weight: 800;
+}
+.lucky-wheel-output {
+  position: fixed;
+  z-index: 900;
+  inset: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(8px, 1.5vh, 20px);
+  background:
+    radial-gradient(circle at center, #213d4c 0, #0b202b 46%, #030b0f 100%);
+  color: #fff;
+  text-align: center;
+}
+.lucky-wheel-output.overlay-wheel {
+  background: transparent;
+  text-shadow: 0 3px 12px #000;
+}
+.lucky-wheel-output > small {
+  color: #f2c94c;
+  font-size: clamp(18px, 1.8vw, 30px);
+  font-weight: 900;
+  letter-spacing: 0.24em;
+}
+.lucky-wheel-output > h1 {
+  margin: 0;
+  font-size: clamp(30px, 3.7vw, 64px);
+  line-height: 1;
+}
+.lucky-wheel-output > strong {
+  min-height: 1.2em;
+  color: #f2c94c;
+  font-size: clamp(30px, 3.4vw, 58px);
+  line-height: 1;
+}
+.team-wheel-wrap {
+  --wheel-size: min(54vh, 520px);
+  position: relative;
+  width: var(--wheel-size);
+  height: var(--wheel-size);
+  filter: drop-shadow(0 18px 34px #0008);
+}
+.team-wheel-wrap.small {
+  --wheel-size: 210px;
+  margin: 10px auto;
+}
+.team-wheel-pointer {
+  position: absolute;
+  z-index: 3;
+  top: -8px;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-left: calc(var(--wheel-size) * 0.045) solid transparent;
+  border-right: calc(var(--wheel-size) * 0.045) solid transparent;
+  border-top: calc(var(--wheel-size) * 0.1) solid #f2c94c;
+  transform: translateX(-50%);
+  filter: drop-shadow(0 3px 2px #0007);
+}
+.team-wheel {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border: clamp(7px, 1vw, 13px) solid #f2c94c;
+  border-radius: 50%;
+  box-shadow:
+    inset 0 0 0 5px #ffffff,
+    inset 0 0 35px #0007;
+}
+.team-wheel.spinning,
+.team-wheel.finished {
+  transform: rotate(var(--wheel-end));
+}
+.team-wheel.spinning {
+  animation: team-wheel-dramatic var(--wheel-duration) cubic-bezier(0.08, 0.67, 0.12, 1) var(--wheel-delay) both;
+}
+@keyframes team-wheel-dramatic {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(var(--wheel-end)); }
+}
+.team-wheel-logo {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: 50%;
+  width: calc(var(--wheel-size) * 0.19);
+  height: calc(var(--wheel-size) * 0.19);
+  display: grid;
+  place-items: center;
+  transform:
+    translate(-50%, -50%)
+    rotate(var(--slice-angle))
+    translateY(calc(var(--wheel-size) * -0.31));
+}
+.team-wheel-logo img,
+.team-wheel-logo b {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #fff;
+  object-fit: contain;
+  color: #172f3d;
+  font-size: calc(var(--wheel-size) * 0.05);
+  box-shadow: 0 3px 10px #0007;
+}
+.team-wheel-wrap.small .team-wheel {
+  border-width: 7px;
+}
+.team-wheel-wrap.small .team-wheel-logo {
+  width: 48px;
+  height: 48px;
 }
 .manage-page .big-projector-toggle {
   min-height: 44px;

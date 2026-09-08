@@ -1,5 +1,6 @@
 'use client';
 import { memo, useEffect, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import {
   Gavel,
   MonitorUp,
@@ -20,6 +21,8 @@ import {
   Settings,
   Play,
   Pause,
+  FerrisWheel,
+  CircleDotDashed,
 } from 'lucide-react';
 import playerManifest from '../player-import.json';
 import { cachePlayerPhotos, loadPlayerPhoto, removeOldPlayerPhotos } from './player-photo-cache';
@@ -46,9 +49,23 @@ const defaultRules: AuctionRules = {
   maxPoints: MAX_BID,
   teamWallet: TEAM_BUDGET,
 };
-type PlayerSet = 'A' | 'B' | 'C';
+const PLAYER_SETS = ['A+', 'A', 'B', 'C'] as const;
+type PlayerSet = (typeof PLAYER_SETS)[number];
+const normalizePlayerSet = (value: unknown): PlayerSet => {
+  const normalized = String(value || '').trim().toUpperCase().replace(/\s+/g, '');
+  return PLAYER_SETS.includes(normalized as PlayerSet)
+    ? (normalized as PlayerSet)
+    : 'C';
+};
 type ObsMode = 'auction' | 'rosters' | 'resting';
 type ProjectorMode = 'auction' | 'rosters' | 'stats' | 'resting';
+type LuckyWheelSpin = {
+  playerIndex: number;
+  teams: number[];
+  winner: number;
+  startedAt: number;
+  duration: number;
+};
 const clampBid = (value: number, rules = defaultRules) =>
   Math.min(
     rules.maxPoints,
@@ -91,10 +108,14 @@ type AState = {
   activeSet: PlayerSet;
   randomPlayerSelection: boolean;
   tickerSpeed: number;
+  wheelSpinDuration: number;
   playerDatabaseUrl: string;
   teams: Team[];
   players: Player[];
   bidHistory: { bid: number; leader: number }[];
+  playerNavigationHistory: number[];
+  playerNavigationPosition: number;
+  luckyWheelSpin: LuckyWheelSpin | null;
   obsMode: ObsMode;
   projectorMode: ProjectorMode;
   rules: AuctionRules;
@@ -113,9 +134,10 @@ type AState = {
     groundSponsorLogo: string;
   };
 };
-const seedPlayers: Player[] = playerManifest.map(({ name, age, file }) =>
-  registeredPlayer(name, age, '/players/' + file),
-);
+const seedPlayers: Player[] = playerManifest.map((entry) => ({
+  ...registeredPlayer(entry.name, entry.age, '/players/' + entry.file),
+  set: normalizePlayerSet((entry as typeof entry & { set?: string }).set),
+}));
 const playerIdentity = (name: string, age: number) =>
   name
     .trim()
@@ -164,11 +186,15 @@ const initial: AState = {
   activeSet: 'A',
   randomPlayerSelection: true,
   tickerSpeed: 5,
+  wheelSpinDuration: 5,
   playerDatabaseUrl:
     'https://docs.google.com/spreadsheets/d/e/2PACX-1vTJSkmTO0aDVXFo1oY7TlqOo7GkfAlrrlxl7mBgMhDKAe5rSPnQVHDDD5gxQ6ptpv7S1L5JMT_-kZyR/pub?output=xlsx',
   teams,
   players: seedPlayers,
   bidHistory: [],
+  playerNavigationHistory: [0],
+  playerNavigationPosition: 0,
+  luckyWheelSpin: null,
   obsMode: 'resting',
   projectorMode: 'resting',
   rules: defaultRules,
@@ -194,6 +220,7 @@ const settingsSnapshot = (state: AState) => ({
   randomPlayerSelection: state.randomPlayerSelection,
   activeSet: state.activeSet,
   tickerSpeed: state.tickerSpeed,
+  wheelSpinDuration: state.wheelSpinDuration,
   obsMode: state.obsMode,
   projectorMode: state.projectorMode,
   celebrationMuted: state.celebrationMuted,
@@ -311,7 +338,7 @@ const normalize = (raw: any): AState => {
       ? p.image
       : '/player-placeholder.svg',
     base: rules.minPoints,
-    set: p.set || (['A', 'B', 'C'][i % 3] as PlayerSet),
+    set: normalizePlayerSet(p.set),
     soldPrice: p.result === 'sold' ? clampBid(p.soldPrice || p.base, rules) : 0,
   }));
   const current = migratedPlayers[raw.player || 0] || migratedPlayers[0];
@@ -328,6 +355,10 @@ const normalize = (raw: any): AState => {
     activeSet: raw.activeSet || current?.set || 'A',
     randomPlayerSelection: raw.randomPlayerSelection ?? true,
     tickerSpeed: Math.min(10, Math.max(1, raw.tickerSpeed || 5)),
+    wheelSpinDuration: Math.min(
+      60,
+      Math.max(1, Number(raw.wheelSpinDuration) || 5),
+    ),
     obsMode:
       raw.obsMode ||
       (raw.resting ? 'resting' : raw.showObsRosters ? 'rosters' : 'auction'),
@@ -351,6 +382,21 @@ const normalize = (raw: any): AState => {
             leader: entry.leader,
           }))
       : [],
+    playerNavigationHistory: Array.isArray(raw.playerNavigationHistory)
+      ? raw.playerNavigationHistory.filter(
+          (index: unknown) =>
+            Number.isInteger(index) &&
+            Number(index) >= 0 &&
+            Number(index) < migratedPlayers.length,
+        )
+      : [Math.min(Number(raw.player) || 0, migratedPlayers.length - 1)],
+    playerNavigationPosition: Math.max(
+      0,
+      Math.min(
+        Number(raw.playerNavigationPosition) || 0,
+        Math.max(0, (raw.playerNavigationHistory?.length || 1) - 1),
+      ),
+    ),
     celebration: { ...initial.celebration, ...(raw.celebration || {}) },
     branding: {
       ...initial.branding,
@@ -643,6 +689,116 @@ function SoldResultScreen({
     </main>
   );
 }
+function TeamWheel({
+  s,
+  spin,
+  size = 'large',
+}: {
+  s: AState;
+  spin: LuckyWheelSpin;
+  size?: 'large' | 'small';
+}) {
+  const ready = spin.startedAt <= 0 || spin.winner < 0;
+  const [finished, setFinished] = useState(
+    () => ready || Date.now() >= spin.startedAt + spin.duration,
+  );
+  useEffect(() => {
+    if (ready) {
+      setFinished(true);
+      return;
+    }
+    setFinished(Date.now() >= spin.startedAt + spin.duration);
+    const remaining = spin.startedAt + spin.duration - Date.now();
+    if (remaining <= 0) return;
+    const timer = window.setTimeout(() => setFinished(true), remaining);
+    return () => window.clearTimeout(timer);
+  }, [ready, spin.startedAt, spin.duration]);
+  const count = Math.max(1, spin.teams.length);
+  const winningPosition = Math.max(0, spin.teams.indexOf(spin.winner));
+  const endAngle = ready
+    ? 0
+    : 360 * 8 - ((winningPosition + 0.5) * 360) / count;
+  const elapsed = Math.min(spin.duration, Math.max(0, Date.now() - spin.startedAt));
+  const colors = ['#c91f3a', '#f2c94c', '#173746', '#ffffff'];
+  const background = 'conic-gradient(' +
+    spin.teams
+      .map((_, index) => {
+        const start = (index * 360) / count;
+        const end = ((index + 1) * 360) / count;
+        return `${colors[index % colors.length]} ${start}deg ${end}deg`;
+      })
+      .join(',') +
+    ')';
+  return (
+    <div className={'team-wheel-wrap ' + size}>
+      <i className="team-wheel-pointer" />
+      <div
+        className={'team-wheel ' + (finished ? 'finished' : 'spinning')}
+        style={
+          {
+            background,
+            '--wheel-end': endAngle + 'deg',
+            '--wheel-duration': spin.duration + 'ms',
+            '--wheel-delay': -elapsed + 'ms',
+          } as CSSProperties
+        }
+      >
+        {spin.teams.map((teamIndex, index) => {
+          const angle = ((index + 0.5) * 360) / count;
+          const team = s.teams[teamIndex];
+          return (
+            <span
+              key={teamIndex}
+              className="team-wheel-logo"
+              style={
+                {
+                  '--slice-angle': angle + 'deg',
+                  '--logo-counter-angle': -endAngle + 'deg',
+                } as CSSProperties
+              }
+            >
+              {team.logo ? <img src={team.logo} alt={team.name} /> : <b>{team.name.slice(0, 2)}</b>}
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+function LuckyWheelOutput({ s, overlay = false }: { s: AState; overlay?: boolean }) {
+  const spin = s.luckyWheelSpin!;
+  const ready = spin.startedAt <= 0 || spin.winner < 0;
+  const [finished, setFinished] = useState(
+    () => ready || Date.now() >= spin.startedAt + spin.duration,
+  );
+  useEffect(() => {
+    if (ready) {
+      setFinished(true);
+      return;
+    }
+    const remaining = spin.startedAt + spin.duration - Date.now();
+    if (remaining <= 0) {
+      setFinished(true);
+      return;
+    }
+    const timer = window.setTimeout(() => setFinished(true), remaining);
+    return () => window.clearTimeout(timer);
+  }, [ready, spin.startedAt, spin.duration]);
+  return (
+    <main className={'lucky-wheel-output ' + (overlay ? 'overlay-wheel' : '')}>
+      <small>LUCKY WHEEL</small>
+      <h1>{s.players[spin.playerIndex]?.name}</h1>
+      <TeamWheel s={s} spin={spin} />
+      <strong>
+        {ready
+          ? 'READY TO SPIN'
+          : finished
+            ? s.teams[spin.winner]?.name
+            : 'SPINNING…'}
+      </strong>
+    </main>
+  );
+}
 function RestScreen({ s, overlay = false }: { s: AState; overlay?: boolean }) {
   return (
     <main className={'rest-screen ' + (overlay ? 'obs-rest' : '')}>
@@ -752,6 +908,14 @@ function LowerThird({ s, animate = false }: { s: AState; animate?: boolean }) {
 }
 export function Overlay() {
   const [s] = useAuction();
+  if (s.luckyWheelSpin)
+    return (
+      <LuckyWheelOutput
+        key={s.luckyWheelSpin.startedAt}
+        s={s}
+        overlay
+      />
+    );
   if (s.obsMode === 'resting') return <RestScreen s={s} overlay />;
   if (s.obsMode === 'rosters')
     return (
@@ -1000,6 +1164,8 @@ export function Projector() {
   const [s] = useAuction(),
     p = s.players[s.player],
     team = s.leader >= 0 ? s.teams[s.leader] : null;
+  if (s.luckyWheelSpin)
+    return <LuckyWheelOutput key={s.luckyWheelSpin.startedAt} s={s} />;
   if (s.projectorMode === 'resting') return <RestScreen s={s} />;
   if (s.projectorMode === 'stats')
     return (
@@ -1097,6 +1263,11 @@ function AdminConsole() {
     [playerStatusFilter, setPlayerStatusFilter] = useState<
       'all' | Player['result']
     >('all'),
+    [luckyWheel, setLuckyWheel] = useState<{
+      playerIndex: number;
+      spinning: boolean;
+      winner: number;
+    } | null>(null),
     [databaseImport, setDatabaseImport] = useState({
       running: false,
       completed: 0,
@@ -1281,17 +1452,22 @@ function AdminConsole() {
         body: JSON.stringify({ url: s.playerDatabaseUrl }),
       });
       const result = (await response.json()) as {
-        players?: Array<{ name: string; age: number; image: string }>;
+        players?: Array<{
+          name: string;
+          age: number;
+          image: string;
+          set: PlayerSet;
+        }>;
         downloaded?: number;
         placeholders?: number;
         error?: string;
       };
       if (!response.ok || !result.players)
         throw new Error(result.error || 'Server database refresh failed');
-      const players = result.players.map((player, index) => ({
+      const players = result.players.map((player) => ({
         ...registeredPlayer(player.name, player.age, player.image),
         base: s.rules.minPoints,
-        set: (['A', 'B', 'C'][index % 3] || 'A') as PlayerSet,
+        set: normalizePlayerSet(player.set),
       }));
       const photoSources = players.map(player => player.image);
       await removeOldPlayerPhotos(photoSources).catch(() => {});
@@ -1309,6 +1485,8 @@ function AdminConsole() {
         leader: -1,
         status: 'live',
         bidHistory: [],
+        playerNavigationHistory: players.length ? [0] : [],
+        playerNavigationPosition: 0,
         celebrationAt: 0,
         players,
       });
@@ -1372,9 +1550,15 @@ function AdminConsole() {
       const nameOffset = headers.findIndex((value) => value.includes('name'));
       const ageOffset = headers.findIndex((value) => value.includes('age'));
       const photoOffset = headers.findIndex((value) => value.includes('photo'));
+      const setOffset = headers.findIndex((value) => value.trim() === 'set');
       if (nameOffset < 0 || photoOffset < 0)
         throw new Error('Name or photo column was not found');
-      const rows: Array<{ name: string; age: number; photo: string }> = [];
+      const rows: Array<{
+        name: string;
+        age: number;
+        photo: string;
+        set: PlayerSet;
+      }> = [];
       for (let row = range.s.r + 1; row <= range.e.r; row += 1) {
         const name = String(
           getCell(row, range.s.c + nameOffset)?.v || '',
@@ -1382,7 +1566,12 @@ function AdminConsole() {
         const photoCell = getCell(row, range.s.c + photoOffset);
         const photo = String(photoCell?.l?.Target || photoCell?.v || '').trim();
         const age = Number(getCell(row, range.s.c + ageOffset)?.v || 0);
-        if (name) rows.push({ name, age, photo });
+        const set = normalizePlayerSet(
+          setOffset >= 0
+            ? getCell(row, range.s.c + setOffset)?.v
+            : undefined,
+        );
+        if (name) rows.push({ name, age, photo, set });
       }
       if (!rows.length) throw new Error('No player registrations were found');
       const players: Player[] = new Array(rows.length);
@@ -1408,7 +1597,7 @@ function AdminConsole() {
           players[index] = {
             ...registeredPlayer(row.name, row.age, image),
             base: s.rules.minPoints,
-            set: (['A', 'B', 'C'][index % 3] || 'A') as PlayerSet,
+            set: row.set,
           };
           completedPhotos += 1;
           setDatabaseImport({
@@ -1438,6 +1627,8 @@ function AdminConsole() {
         leader: -1,
         status: 'live',
         bidHistory: [],
+        playerNavigationHistory: players.length ? [0] : [],
+        playerNavigationPosition: 0,
         celebrationAt: 0,
         players,
       });
@@ -1481,6 +1672,8 @@ function AdminConsole() {
       leader: -1,
       status: 'live',
       bidHistory: [],
+      playerNavigationHistory: downloadedPlayers.length ? [0] : [],
+      playerNavigationPosition: 0,
       celebrationAt: 0,
       players: downloadedPlayers,
     });
@@ -1563,7 +1756,12 @@ function AdminConsole() {
           : Math.min(rules.maxPoints, Math.max(rules.minPoints, s.bid)),
     });
   };
-  const send = (i: number) =>
+  const send = (i: number) => {
+    const history = s.playerNavigationHistory.slice(
+      0,
+      s.playerNavigationPosition + 1,
+    );
+    if (history[history.length - 1] !== i) history.push(i);
     setS({
       ...s,
       player: i,
@@ -1573,7 +1771,10 @@ function AdminConsole() {
       status: 'live',
       bidHistory: [],
       celebrationAt: 0,
+      playerNavigationHistory: history,
+      playerNavigationPosition: history.length - 1,
     });
+  };
   const bid = (i: number) => {
     const nextBid = s.leader < 0 ? s.rules.minPoints : s.bid + BID_STEP;
     if (
@@ -1623,7 +1824,11 @@ function AdminConsole() {
           : p,
       ),
     });
-  const navigateTo = (n: number) => {
+  const navigateTo = (
+    n: number,
+    history = s.playerNavigationHistory,
+    position = s.playerNavigationPosition,
+  ) => {
     const selectedPlayer = s.players[n];
     setS({
       ...s,
@@ -1638,6 +1843,8 @@ function AdminConsole() {
         selectedPlayer.result === 'pending' ? 'live' : selectedPlayer.result,
       bidHistory: [],
       celebrationAt: 0,
+      playerNavigationHistory: history,
+      playerNavigationPosition: position,
     });
   };
   const playersInSet = s.players
@@ -1665,26 +1872,146 @@ function AdminConsole() {
     return -1;
   };
   const next = () => {
+    const history = s.playerNavigationHistory.length
+      ? s.playerNavigationHistory
+      : [s.player];
+    const position = Math.min(
+      s.playerNavigationPosition,
+      history.length - 1,
+    );
+    if (position < history.length - 1) {
+      navigateTo(history[position + 1], history, position + 1);
+      return;
+    }
     if (!pendingInSet.length) return;
     if (s.randomPlayerSelection) {
-      const pool = pendingInSet.filter((index) => index !== s.player);
+      const shown = new Set(
+        history.filter((index) => s.players[index]?.set === s.activeSet),
+      );
+      const pool = pendingInSet.filter((index) => !shown.has(index));
       if (!pool.length) return;
-      navigateTo(pool[Math.floor(Math.random() * pool.length)]);
+      const chosen = pool[Math.floor(Math.random() * pool.length)];
+      const nextHistory = [...history, chosen];
+      navigateTo(chosen, nextHistory, nextHistory.length - 1);
       return;
     }
     const candidate = pendingInDirection(1);
-    if (candidate >= 0) navigateTo(candidate);
+    if (candidate >= 0) {
+      const nextHistory = [...history, candidate];
+      navigateTo(candidate, nextHistory, nextHistory.length - 1);
+    }
   };
   const previous = () => {
-    const candidate = pendingInDirection(-1);
-    if (candidate >= 0) navigateTo(candidate);
+    const history = s.playerNavigationHistory.length
+      ? s.playerNavigationHistory
+      : [s.player];
+    const position = Math.min(s.playerNavigationPosition, history.length - 1);
+    if (position > 0)
+      navigateTo(history[position - 1], history, position - 1);
   };
   const switchSet = (set: PlayerSet) => {
-    const first = s.players.findIndex(
-      (player) => player.set === set && player.result === 'pending',
+    const history = s.playerNavigationHistory.slice(
+      0,
+      s.playerNavigationPosition + 1,
     );
-    if (first >= 0) navigateTo(first);
-    else setS({ ...s, activeSet: set });
+    const alreadyShown = new Set(
+      history.filter((index) => s.players[index]?.set === set),
+    );
+    const first = s.players.findIndex(
+      (player, index) =>
+        player.set === set &&
+        player.result === 'pending' &&
+        !alreadyShown.has(index),
+    );
+    if (first >= 0) {
+      const nextHistory =
+        history[history.length - 1] === first ? history : [...history, first];
+      navigateTo(first, nextHistory, nextHistory.length - 1);
+    }
+    else
+      setS({
+        ...s,
+        activeSet: set,
+        playerNavigationHistory: history,
+        playerNavigationPosition: Math.max(0, history.length - 1),
+      });
+  };
+  const eligibleLuckyTeams = s.teams
+    .map((team, index) => ({ team, index }))
+    .filter(({ index }) => maxAllowedBid(s, index) >= s.rules.minPoints);
+  const openLuckyWheel = (playerIndex: number) => {
+    const participantIndexes = eligibleLuckyTeams.map(({ index }) => index);
+    setLuckyWheel({ playerIndex, spinning: false, winner: -1 });
+    setS({
+      ...s,
+      luckyWheelSpin: participantIndexes.length
+        ? {
+            playerIndex,
+            teams: participantIndexes,
+            winner: -1,
+            startedAt: 0,
+            duration: s.wheelSpinDuration * 1000,
+          }
+        : null,
+    });
+  };
+  const spinLuckyWheel = () => {
+    if (!luckyWheel || luckyWheel.spinning || !eligibleLuckyTeams.length) return;
+    const winner =
+      eligibleLuckyTeams[Math.floor(Math.random() * eligibleLuckyTeams.length)]
+        .index;
+    const spin: LuckyWheelSpin = {
+      playerIndex: luckyWheel.playerIndex,
+      teams: eligibleLuckyTeams.map(({ index }) => index),
+      winner,
+      startedAt: Date.now(),
+      duration: s.wheelSpinDuration * 1000,
+    };
+    setLuckyWheel({ ...luckyWheel, spinning: true, winner: -1 });
+    setS({ ...s, luckyWheelSpin: spin });
+    window.setTimeout(
+      () =>
+        setLuckyWheel((current) =>
+          current
+            ? { ...current, spinning: false, winner }
+            : null,
+        ),
+      spin.duration,
+    );
+  };
+  const assignLuckyWinner = () => {
+    if (!luckyWheel || luckyWheel.winner < 0) return;
+    const playerIndex = luckyWheel.playerIndex;
+    const winner = luckyWheel.winner;
+    const history = s.playerNavigationHistory.slice(
+      0,
+      s.playerNavigationPosition + 1,
+    );
+    if (history[history.length - 1] !== playerIndex) history.push(playerIndex);
+    setS({
+      ...s,
+      player: playerIndex,
+      activeSet: s.players[playerIndex].set,
+      bid: s.rules.minPoints,
+      leader: winner,
+      status: 'sold',
+      bidHistory: [],
+      celebrationAt: Date.now(),
+      luckyWheelSpin: null,
+      playerNavigationHistory: history,
+      playerNavigationPosition: history.length - 1,
+      players: s.players.map((player, index) =>
+        index === playerIndex
+          ? {
+              ...player,
+              result: 'sold',
+              soldTo: winner,
+              soldPrice: s.rules.minPoints,
+            }
+          : player,
+      ),
+    });
+    setLuckyWheel(null);
   };
   const reset = () =>
     setS({
@@ -1715,6 +2042,8 @@ function AdminConsole() {
       leader: -1,
       status: 'live',
       bidHistory: [],
+      playerNavigationHistory: [0],
+      playerNavigationPosition: 0,
       celebrationAt: 0,
       obsMode: 'resting',
       projectorMode: 'resting',
@@ -1816,7 +2145,7 @@ function AdminConsole() {
                 <small>ACTIVE PLAYER SET</small>
                 <b>Choose the skill group being auctioned</b>
               </span>
-              {(['A', 'B', 'C'] as PlayerSet[]).map((set) => (
+              {PLAYER_SETS.map((set) => (
                 <button
                   className={s.activeSet === set ? 'active' : ''}
                   onClick={() => switchSet(set)}
@@ -2041,7 +2370,7 @@ function AdminConsole() {
             <section>
               <small>FILTER BY SET</small>
               <div>
-                {(['all', 'A', 'B', 'C'] as const).map((set) => (
+                {(['all', ...PLAYER_SETS] as const).map((set) => (
                   <button
                     className={playerSetFilter === set ? 'active' : ''}
                     onClick={() => setPlayerSetFilter(set)}
@@ -2104,9 +2433,9 @@ function AdminConsole() {
                       })
                     }
                   >
-                    <option value="A">Set A</option>
-                    <option value="B">Set B</option>
-                    <option value="C">Set C</option>
+                    {PLAYER_SETS.map((set) => (
+                      <option key={set} value={set}>Set {set}</option>
+                    ))}
                   </select>
                 </span>
                 <span>
@@ -2166,9 +2495,23 @@ function AdminConsole() {
                   )}
                 </span>
                 <span>
-                  <button onClick={() => send(i)}>
-                    {s.player === i ? 'LIVE NOW' : 'Send to auction'}
-                  </button>
+                  <div className="player-row-actions">
+                    <button
+                      disabled={x.result === 'sold'}
+                      onClick={() => send(i)}
+                    >
+                      {s.player === i ? 'LIVE NOW' : 'Send to auction'}
+                    </button>
+                    <button
+                      className="lucky-wheel-button"
+                      title="Assign through lucky wheel"
+                      aria-label={'Open lucky wheel for ' + x.name}
+                      disabled={x.result === 'sold'}
+                      onClick={() => openLuckyWheel(i)}
+                    >
+                      <CircleDotDashed />
+                    </button>
+                  </div>
                 </span>
               </div>
             ))}
@@ -2179,6 +2522,87 @@ function AdminConsole() {
             )}
           </div>
         </section>
+      )}
+      {luckyWheel && (
+        <div
+          className="lucky-wheel-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="lucky-wheel-title"
+        >
+          <section className="lucky-wheel-dialog">
+            <button
+              className="lucky-wheel-close"
+              aria-label="Close lucky wheel"
+              disabled={luckyWheel.spinning}
+              onClick={() => {
+                setS({ ...s, luckyWheelSpin: null });
+                setLuckyWheel(null);
+              }}
+            >
+              ×
+            </button>
+            <small>LUCKY WHEEL ASSIGNMENT</small>
+            <h2 id="lucky-wheel-title">
+              {s.players[luckyWheel.playerIndex]?.name}
+            </h2>
+            {eligibleLuckyTeams.length > 0 && (
+              <TeamWheel
+                key={
+                  s.luckyWheelSpin?.playerIndex === luckyWheel.playerIndex
+                    ? s.luckyWheelSpin.startedAt
+                    : 0
+                }
+                s={s}
+                size="small"
+                spin={
+                  s.luckyWheelSpin?.playerIndex === luckyWheel.playerIndex
+                    ? s.luckyWheelSpin
+                    : {
+                        playerIndex: luckyWheel.playerIndex,
+                        teams: eligibleLuckyTeams.map(({ index }) => index),
+                        winner: eligibleLuckyTeams[0].index,
+                        startedAt: 0,
+                        duration: 1,
+                      }
+                }
+              />
+            )}
+            {eligibleLuckyTeams.length ? (
+              <>
+                <p>
+                  Eligible teams: {eligibleLuckyTeams.map(({ team }) => team.name).join(' • ')}
+                </p>
+                <strong className="lucky-wheel-result">
+                  {luckyWheel.spinning
+                    ? 'SPINNING…'
+                    : luckyWheel.winner >= 0
+                      ? s.teams[luckyWheel.winner]?.name
+                      : 'Ready to spin'}
+                </strong>
+                <div className="lucky-wheel-actions">
+                  <button
+                    disabled={luckyWheel.spinning}
+                    onClick={spinLuckyWheel}
+                  >
+                    <FerrisWheel />
+                    {luckyWheel.winner >= 0 ? 'Spin again' : 'Spin wheel'}
+                  </button>
+                  <button
+                    disabled={luckyWheel.spinning || luckyWheel.winner < 0}
+                    onClick={assignLuckyWinner}
+                  >
+                    Assign player
+                  </button>
+                </div>
+              </>
+            ) : (
+              <p className="lucky-wheel-empty">
+                No team has both an open player slot and enough reserved balance.
+              </p>
+            )}
+          </section>
+        </div>
       )}
       {tab === 'rosters' && (
         <section className="manage-page">
@@ -2319,6 +2743,26 @@ function AdminConsole() {
                   <option value="random">Random pending player</option>
                   <option value="sequential">Sequential order</option>
                 </select>
+              </label>
+              <label>
+                <span>Lucky wheel spin duration</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={60}
+                  step={1}
+                  value={s.wheelSpinDuration}
+                  onChange={(event) =>
+                    setS({
+                      ...s,
+                      wheelSpinDuration: Math.min(
+                        60,
+                        Math.max(1, Number(event.target.value) || 1),
+                      ),
+                    })
+                  }
+                />
+                <small>Duration in seconds, from 1 to 60.</small>
               </label>
               <em>
                 Minimum wallet required for a full squad:{' '}

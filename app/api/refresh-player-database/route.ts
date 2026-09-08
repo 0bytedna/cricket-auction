@@ -3,6 +3,16 @@ import path from 'node:path';
 import * as XLSX from 'xlsx';
 
 let refreshing = false;
+const removeIfPresent = async (
+  target: string,
+  options: { recursive?: boolean } = {},
+) => {
+  try {
+    await fs.rm(target, { ...options, force: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+};
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const slugify = (name: string) =>
@@ -11,6 +21,14 @@ const slugify = (name: string) =>
     .normalize('NFKD')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '') || 'player';
+type PlayerSet = 'A+' | 'A' | 'B' | 'C';
+const playerSets: PlayerSet[] = ['A+', 'A', 'B', 'C'];
+const parsePlayerSet = (value: unknown): PlayerSet => {
+  const normalized = String(value || '').trim().toUpperCase().replace(/\s+/g, '');
+  return playerSets.includes(normalized as PlayerSet)
+    ? (normalized as PlayerSet)
+    : 'C';
+};
 
 const downloadPhoto = async (id: string) => {
   const url =
@@ -73,10 +91,11 @@ export async function POST(request: Request) {
     if (path.dirname(liveDirectory) !== clientRoot)
       throw new Error('Unsafe player photo path.');
     // Explicit authenticated refresh discards old photos before any download.
-    await fs.rm(liveDirectory, { recursive: true, force: true });
+    await fs.mkdir(clientRoot, { recursive: true });
+    await removeIfPresent(liveDirectory, { recursive: true });
     const databasePath = path.resolve('data', 'downloaded-player-database.json');
     await fs.mkdir(path.dirname(databasePath), { recursive: true });
-    await fs.rm(databasePath, { force: true });
+    await removeIfPresent(databasePath);
     const response = await fetch(source, { cache: 'no-store', signal: AbortSignal.timeout(60000) });
     if (!response.ok)
       throw new Error('Spreadsheet returned ' + response.status);
@@ -93,6 +112,7 @@ export async function POST(request: Request) {
           name: String(find('name') || '').trim(),
           age: Number(find('age') || 0),
           photo: String(find('photo') || '').trim(),
+          set: parsePlayerSet(find('set')),
         };
       })
       .filter((player) => player.name);
@@ -106,7 +126,12 @@ export async function POST(request: Request) {
       throw new Error('Unsafe player photo path.');
     await fs.mkdir(stagedDirectory, { recursive: true });
 
-    const players = new Array<{ name: string; age: number; image: string }>(
+    const players = new Array<{
+      name: string;
+      age: number;
+      image: string;
+      set: PlayerSet;
+    }>(
       registrations.length,
     );
     const used = new Set<string>();
@@ -136,7 +161,12 @@ export async function POST(request: Request) {
         } catch {
           placeholders += 1;
         }
-        players[index] = { name: player.name, age: player.age, image };
+        players[index] = {
+          name: player.name,
+          age: player.age,
+          image,
+          set: player.set,
+        };
       }
     };
     await Promise.all(

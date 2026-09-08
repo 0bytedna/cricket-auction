@@ -1900,6 +1900,10 @@ function AdminConsole() {
     return -1;
   };
   const next = () => {
+    if (setSequenceExhausted) {
+      resetSetSequence();
+      return;
+    }
     const history = s.playerNavigationHistory.length
       ? s.playerNavigationHistory
       : [s.player];
@@ -2331,17 +2335,15 @@ function AdminConsole() {
                 </span>
               </button>
               <button
-                className={'move-player next' + (setSequenceExhausted ? ' reset-sequence' : '')}
-                onClick={setSequenceExhausted ? resetSetSequence : next}
+                className="move-player next"
+                onClick={next}
                 disabled={!pendingInSet.length}
               >
                 <span>
-                  <small>
-                    {setSequenceExhausted ? 'ALL PLAYERS SHOWN' : 'RIGHT ARROW KEY'}
-                  </small>
-                  {setSequenceExhausted ? 'RESET SET SEQUENCE' : 'NEXT'}
+                  <small>RIGHT ARROW KEY</small>
+                  NEXT PLAYER
                 </span>
-                {setSequenceExhausted ? <RotateCcw /> : <ChevronRight />}
+                <ChevronRight />
               </button>
             </div>
           </section>

@@ -1862,6 +1862,27 @@ function AdminConsole() {
   const pendingInSet = playersInSet.filter(
     (index) => s.players[index].result === 'pending',
   );
+  const shownInActiveSet = new Set(
+    s.playerNavigationHistory.filter(
+      (index) => s.players[index]?.set === s.activeSet,
+    ),
+  );
+  const unseenPendingInSet = pendingInSet.filter(
+    (index) => !shownInActiveSet.has(index),
+  );
+  const setSequenceExhausted =
+    pendingInSet.length > 0 && unseenPendingInSet.length === 0;
+  const resetSetSequence = () => {
+    if (!pendingInSet.length) return;
+    const history = s.playerNavigationHistory.filter(
+      (index) => s.players[index]?.set !== s.activeSet,
+    );
+    const selected = s.randomPlayerSelection
+      ? pendingInSet[Math.floor(Math.random() * pendingInSet.length)]
+      : pendingInSet[0];
+    const nextHistory = [...history, selected];
+    navigateTo(selected, nextHistory, nextHistory.length - 1);
+  };
   const pendingInDirection = (direction: 1 | -1) => {
     if (!pendingInSet.length) return -1;
     if (setPosition < 0)
@@ -1899,19 +1920,27 @@ function AdminConsole() {
       );
       return;
     }
-    if (!pendingInSet.length) return;
+    if (!pendingInSet.length || !unseenPendingInSet.length) return;
     if (s.randomPlayerSelection) {
-      const shown = new Set(
-        history.filter((index) => s.players[index]?.set === s.activeSet),
-      );
-      const pool = pendingInSet.filter((index) => !shown.has(index));
-      if (!pool.length) return;
-      const chosen = pool[Math.floor(Math.random() * pool.length)];
+      const chosen =
+        unseenPendingInSet[
+          Math.floor(Math.random() * unseenPendingInSet.length)
+        ];
       const nextHistory = [...history, chosen];
       navigateTo(chosen, nextHistory, nextHistory.length - 1);
       return;
     }
-    const candidate = pendingInDirection(1);
+    const unseenPlayers = new Set(unseenPendingInSet);
+    let candidate = -1;
+    for (let offset = 1; offset <= playersInSet.length; offset += 1) {
+      const positionInSet =
+        (Math.max(0, setPosition) + offset) % playersInSet.length;
+      const possiblePlayer = playersInSet[positionInSet];
+      if (unseenPlayers.has(possiblePlayer)) {
+        candidate = possiblePlayer;
+        break;
+      }
+    }
     if (candidate >= 0) {
       const nextHistory = [...history, candidate];
       navigateTo(candidate, nextHistory, nextHistory.length - 1);
@@ -2301,12 +2330,18 @@ function AdminConsole() {
                   RESET
                 </span>
               </button>
-              <button className="move-player next" onClick={next}>
+              <button
+                className={'move-player next' + (setSequenceExhausted ? ' reset-sequence' : '')}
+                onClick={setSequenceExhausted ? resetSetSequence : next}
+                disabled={!pendingInSet.length}
+              >
                 <span>
-                  <small>RIGHT ARROW KEY</small>
-                  NEXT
+                  <small>
+                    {setSequenceExhausted ? 'ALL PLAYERS SHOWN' : 'RIGHT ARROW KEY'}
+                  </small>
+                  {setSequenceExhausted ? 'RESET SET SEQUENCE' : 'NEXT'}
                 </span>
-                <ChevronRight />
+                {setSequenceExhausted ? <RotateCcw /> : <ChevronRight />}
               </button>
             </div>
           </section>

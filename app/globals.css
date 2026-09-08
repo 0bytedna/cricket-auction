@@ -4116,7 +4116,7 @@ a {
   line-height: 1;
 }
 .team-wheel-wrap {
-  --wheel-size: min(54vh, 520px);
+  --wheel-size: min(68vh, 720px);
   position: relative;
   width: var(--wheel-size);
   height: var(--wheel-size);
@@ -4181,12 +4181,12 @@ a {
   height: 100%;
   display: grid;
   place-items: center;
-  border-radius: 50%;
-  background: #fff;
+  border-radius: 0;
+  background: transparent;
   object-fit: contain;
   color: #172f3d;
   font-size: calc(var(--wheel-size) * 0.05);
-  box-shadow: 0 3px 10px #0007;
+  box-shadow: none;
 }
 .team-wheel-wrap.small .team-wheel {
   border-width: 7px;

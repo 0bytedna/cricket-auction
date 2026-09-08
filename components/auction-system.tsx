@@ -722,13 +722,13 @@ function TeamWheel({
     ? 0
     : 360 * 8 - ((winningPosition + 0.5) * 360) / count;
   const elapsed = Math.min(spin.duration, Math.max(0, Date.now() - spin.startedAt));
-  const colors = ['#c91f3a', '#f2c94c', '#173746', '#ffffff'];
   const background = 'conic-gradient(' +
     spin.teams
       .map((_, index) => {
         const start = (index * 360) / count;
         const end = ((index + 1) * 360) / count;
-        return `${colors[index % colors.length]} ${start}deg ${end}deg`;
+        const divider = Math.max(start, end - 0.8);
+        return `#ffffff ${start}deg ${divider}deg, #d8dde1 ${divider}deg ${end}deg`;
       })
       .join(',') +
     ')';

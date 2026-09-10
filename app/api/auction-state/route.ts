@@ -5,6 +5,7 @@ type LiveAuctionStore = {
 
 const shared = globalThis as typeof globalThis & {
   __splLiveAuction?: LiveAuctionStore;
+  __splLiveAuctionSubscribers?: Set<ReadableStreamDefaultController<Uint8Array>>;
 };
 
 const responseHeaders = {
@@ -28,6 +29,16 @@ export async function POST(request: Request) {
       return new Response('Invalid auction state.', { status: 400 });
     const revision = (shared.__splLiveAuction?.revision || 0) + 1;
     shared.__splLiveAuction = { revision, state };
+    const message = new TextEncoder().encode(
+      `data: ${JSON.stringify(shared.__splLiveAuction)}\n\n`,
+    );
+    for (const subscriber of shared.__splLiveAuctionSubscribers || []) {
+      try {
+        subscriber.enqueue(message);
+      } catch {
+        shared.__splLiveAuctionSubscribers?.delete(subscriber);
+      }
+    }
     return Response.json({ revision }, { headers: responseHeaders });
   } catch {
     return new Response('Unable to save auction state.', { status: 400 });

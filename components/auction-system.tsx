@@ -434,6 +434,7 @@ function useAuction(role: AuctionClientRole) {
     let active = true;
     let timer = 0;
     let revision = -1;
+    let events: EventSource | null = null;
     if (role === 'admin') {
       void (async () => {
         const persistent = await loadPersistentAuction();
@@ -453,6 +454,17 @@ function useAuction(role: AuctionClientRole) {
         void publishLiveAuction(hydrated);
       })();
     } else {
+      const acceptLiveState = (live: any) => {
+        if (
+          active &&
+          Number.isFinite(live?.revision) &&
+          live.revision > revision &&
+          live.state
+        ) {
+          revision = live.revision;
+          setS(normalize(live.state));
+        }
+      };
       const refresh = async () => {
         try {
           const response = await fetch(`/api/auction-state?since=${revision}`, {
@@ -460,16 +472,25 @@ function useAuction(role: AuctionClientRole) {
           });
           if (response.ok && response.status !== 204) {
             const live = await response.json();
-            if (active && Number.isFinite(live.revision) && live.state) {
-              revision = live.revision;
-              setS(normalize(live.state));
-            }
+            acceptLiveState(live);
           }
         } catch {
           // Keep the last good frame during a temporary connection interruption.
         }
-        if (active) timer = window.setTimeout(refresh, 350);
+        if (active) timer = window.setTimeout(refresh, 2000);
       };
+      try {
+        events = new EventSource('/api/auction-events');
+        events.onmessage = (event) => {
+          try {
+            acceptLiveState(JSON.parse(event.data));
+          } catch {
+            // Ignore a malformed event and keep the fallback poll active.
+          }
+        };
+      } catch {
+        // Older embedded browsers continue using the fallback poll.
+      }
       void refresh();
     }
     let channel: BroadcastChannel | null = null;
@@ -482,15 +503,18 @@ function useAuction(role: AuctionClientRole) {
     return () => {
       active = false;
       window.clearTimeout(timer);
+      events?.close();
       channel?.close();
     };
   }, [role]);
   useEffect(() => {
-    const images = s.players
-      .map((player) => player.image)
+    const images = [
+      s.players[s.player]?.image,
+      ...s.players.map((player) => player.image),
+    ]
       .filter((source): source is string => Boolean(source));
     void cachePlayerPhotos(images);
-  }, [s.players]);
+  }, [s.player, s.players]);
   const update = (n: AState) => {
     setS(n);
     saveLocalSettings(n);

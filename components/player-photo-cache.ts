@@ -25,7 +25,7 @@ export function loadPlayerPhoto(source: string): Promise<Blob> {
     const cache = await openPhotoCache();
     const saved = await cache?.match(key).catch(() => undefined);
     if (saved) return saved.blob();
-    const response = await fetch(key, { signal: AbortSignal.timeout(30000) });
+    const response = await fetch(key, { cache: 'force-cache' });
     if (!response.ok || !response.headers.get('content-type')?.startsWith('image/'))
       throw new Error('Player photo unavailable');
     const copy = response.clone();

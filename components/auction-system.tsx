@@ -419,33 +419,72 @@ const normalize = (raw: any): AState => {
       })) || teams,
   };
 };
-function useAuction() {
+type AuctionClientRole = 'admin' | 'output';
+const publishLiveAuction = (state: AState) =>
+  fetch('/api/auction-state', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(state),
+    cache: 'no-store',
+  }).catch(() => undefined);
+
+function useAuction(role: AuctionClientRole) {
   const [s, setS] = useState<AState>(initial);
   useEffect(() => {
     let active = true;
-    void (async () => {
-      const persistent = await loadPersistentAuction();
-      if (!active) return;
-      let restored: AState = persistent || initial;
-      try {
-        if (!persistent) {
-          const saved = localStorage.getItem(key);
-          if (saved) restored = JSON.parse(saved);
+    let timer = 0;
+    let revision = -1;
+    if (role === 'admin') {
+      void (async () => {
+        const persistent = await loadPersistentAuction();
+        if (!active) return;
+        let restored: AState = persistent || initial;
+        try {
+          if (!persistent) {
+            const saved = localStorage.getItem(key);
+            if (saved) restored = JSON.parse(saved);
+          }
+        } catch {
+          // Keep the safe initial state if legacy storage is unreadable.
         }
-      } catch {
-        // Keep the safe initial state if legacy storage is unreadable.
-      }
-      const hydrated = normalize({ ...restored, ...readLocalSettings() });
-      setS(hydrated);
-      saveLocalSettings(hydrated);
-    })();
-    const c = new BroadcastChannel(key);
-    c.onmessage = (e) => setS(normalize(e.data));
+        const hydrated = normalize({ ...restored, ...readLocalSettings() });
+        setS(hydrated);
+        saveLocalSettings(hydrated);
+        void publishLiveAuction(hydrated);
+      })();
+    } else {
+      const refresh = async () => {
+        try {
+          const response = await fetch(`/api/auction-state?since=${revision}`, {
+            cache: 'no-store',
+          });
+          if (response.ok && response.status !== 204) {
+            const live = await response.json();
+            if (active && Number.isFinite(live.revision) && live.state) {
+              revision = live.revision;
+              setS(normalize(live.state));
+            }
+          }
+        } catch {
+          // Keep the last good frame during a temporary connection interruption.
+        }
+        if (active) timer = window.setTimeout(refresh, 350);
+      };
+      void refresh();
+    }
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel(key);
+      channel.onmessage = (event) => setS(normalize(event.data));
+    } catch {
+      // Server sync remains available in embedded browsers without BroadcastChannel.
+    }
     return () => {
       active = false;
-      c.close();
+      window.clearTimeout(timer);
+      channel?.close();
     };
-  }, []);
+  }, [role]);
   useEffect(() => {
     const images = s.players
       .map((player) => player.image)
@@ -461,9 +500,14 @@ function useAuction() {
     } catch {
       // Large uploaded images can exceed localStorage; IndexedDB is primary.
     }
-    const c = new BroadcastChannel(key);
-    c.postMessage(n);
-    c.close();
+    try {
+      const c = new BroadcastChannel(key);
+      c.postMessage(n);
+      c.close();
+    } catch {
+      // Server publication below also reaches Projector and OBS.
+    }
+    if (role === 'admin') void publishLiveAuction(n);
   };
   return [s, update] as const;
 }
@@ -509,7 +553,12 @@ function PlayerImage({ src, alt = '' }: { src?: string; alt?: string }) {
         objectUrl = URL.createObjectURL(blob);
         const image = new Image();
         image.src = objectUrl;
-        await image.decode();
+        if (typeof image.decode === 'function') await image.decode();
+        else
+          await new Promise<void>((resolve, reject) => {
+            image.onload = () => resolve();
+            image.onerror = () => reject(new Error('Player photo unavailable'));
+          });
         if (active) setReady({ source, url: objectUrl });
       } catch {
         if (active) setReady({ source, url: '/player-placeholder.svg' });
@@ -910,7 +959,7 @@ function LowerThird({ s, animate = false }: { s: AState; animate?: boolean }) {
   );
 }
 export function Overlay() {
-  const [s] = useAuction();
+  const [s] = useAuction('output');
   if (s.luckyWheelSpin)
     return (
       <LuckyWheelOutput
@@ -1164,7 +1213,7 @@ const AuctionTicker = memo(
   (previous, next) => tickerStateKey(previous.s) === tickerStateKey(next.s),
 );
 export function Projector() {
-  const [s] = useAuction(),
+  const [s] = useAuction('output'),
     p = s.players[s.player],
     team = s.leader >= 0 ? s.teams[s.leader] : null;
   if (s.luckyWheelSpin)
@@ -1255,7 +1304,7 @@ export function Projector() {
   );
 }
 function AdminConsole() {
-  const [s, setS] = useAuction(),
+  const [s, setS] = useAuction('admin'),
     [tab, setTab] = useState<'auction' | 'players' | 'rosters' | 'settings'>(
       'auction',
     ),

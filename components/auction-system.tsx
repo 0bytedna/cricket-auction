@@ -449,9 +449,22 @@ function useAuction(role: AuctionClientRole) {
           // Keep the safe initial state if legacy storage is unreadable.
         }
         const hydrated = normalize({ ...restored, ...readLocalSettings() });
-        setS(hydrated);
-        saveLocalSettings(hydrated);
-        void publishLiveAuction(hydrated);
+        const paused: AState = {
+          ...hydrated,
+          obsMode: 'resting',
+          projectorMode: 'resting',
+          luckyWheelSpin: null,
+          celebrationAt: 0,
+        };
+        setS(paused);
+        saveLocalSettings(paused);
+        void savePersistentAuction(paused);
+        try {
+          localStorage.setItem(key, JSON.stringify(paused));
+        } catch {
+          // IndexedDB remains the primary copy for larger auction state.
+        }
+        void publishLiveAuction(paused);
       })();
     } else {
       const acceptLiveState = (live: any) => {
@@ -1358,6 +1371,20 @@ function AdminConsole() {
     team = s.leader >= 0 ? s.teams[s.leader] : null;
   const auctionRunning =
     s.obsMode === 'auction' && s.projectorMode === 'auction';
+  useEffect(() => {
+    const pauseOnExit = () => {
+      try {
+        navigator.sendBeacon('/api/auction-pause');
+      } catch {
+        void fetch('/api/auction-pause', {
+          method: 'POST',
+          keepalive: true,
+        });
+      }
+    };
+    window.addEventListener('pagehide', pauseOnExit);
+    return () => window.removeEventListener('pagehide', pauseOnExit);
+  }, []);
   const normalizedPlayerSearch = playerSearch.trim().toLocaleLowerCase();
   const filteredPlayers = s.players
     .map((player, index) => ({ player, index }))
@@ -3205,6 +3232,7 @@ export function Admin() {
     [isSetup, setIsSetup] = useState(false);
   useEffect(() => {
     setIsSetup(!localStorage.getItem('boundaryx-admin-password'));
+    void fetch('/api/auction-pause', { method: 'POST', keepalive: true });
     setReady(true);
   }, []);
   const submit = (e: React.FormEvent) => {
@@ -3216,8 +3244,12 @@ export function Admin() {
     const saved = localStorage.getItem('boundaryx-admin-password');
     if (!saved) {
       localStorage.setItem('boundaryx-admin-password', value);
+      void fetch('/api/auction-pause', { method: 'POST', keepalive: true });
       setUnlocked(true);
-    } else if (saved === value) setUnlocked(true);
+    } else if (saved === value) {
+      void fetch('/api/auction-pause', { method: 'POST', keepalive: true });
+      setUnlocked(true);
+    }
     else setError('Incorrect password');
   };
   if (!ready) return null;

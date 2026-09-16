@@ -3155,6 +3155,33 @@ a {
     inset 0 -5px var(--team),
     0 10px 25px #0004;
 }
+
+/* A leading bidder keeps identical typography and layout; only its outline changes. */
+.admin-main .team-buttons button.leading {
+  transform: none;
+  border-color: #d62839;
+  background: white;
+  box-shadow: 0 8px 20px #102a3812;
+}
+.admin-main .team-buttons button.leading span b {
+  color: #172b36;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.12;
+}
+.admin-main .team-buttons button.leading span small {
+  color: #7b8993;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+.admin-main .team-buttons button.leading strong {
+  min-height: 42px;
+  padding: 9px 11px;
+  background: #eef3f5;
+  color: #253f4a;
+  font-size: 12px;
+}
 .rest-teams .team-mark {
   width: 118px;
   height: 118px;

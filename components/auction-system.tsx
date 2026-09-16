@@ -613,16 +613,17 @@ function TeamMark({
   team?: Team | null;
   className?: string;
 }) {
+  const [logoFailed, setLogoFailed] = useState(false);
+  useEffect(() => setLogoFailed(false), [team?.logo]);
+  const showLogo = Boolean(team?.logo) && !logoFailed;
   return (
     <i className={'team-mark ' + className} aria-label={team?.name}>
-      <b>{team?.name || '-'}</b>
-      {team?.logo && (
+      {!showLogo && <b>{team?.name || '-'}</b>}
+      {showLogo && (
         <img
           src={team.logo}
           alt=""
-          onError={(event) => {
-            event.currentTarget.style.display = 'none';
-          }}
+          onError={() => setLogoFailed(true)}
         />
       )}
     </i>

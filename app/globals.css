@@ -1107,6 +1107,26 @@ a {
   display: flex;
   gap: 5px;
 }
+.player-search-filter input {
+  width: min(260px, 100%);
+  min-height: 40px;
+  padding: 0 13px;
+  border: 1px solid #d4dee2;
+  border-radius: 6px;
+  background: #f7f9fa;
+  color: #263e49;
+  font-size: 14px;
+  font-weight: 700;
+  outline: none;
+}
+.player-search-filter input:focus {
+  border-color: #263b4a;
+  box-shadow: 0 0 0 3px #263b4a18;
+}
+.player-search-filter input::placeholder {
+  color: #89969d;
+  font-weight: 600;
+}
 .player-filters button {
   min-height: 34px;
   padding: 0 12px;

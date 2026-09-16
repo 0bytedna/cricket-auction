@@ -1340,6 +1340,7 @@ function AdminConsole() {
     [playerStatusFilter, setPlayerStatusFilter] = useState<
       'all' | Player['result']
     >('all'),
+    [playerSearch, setPlayerSearch] = useState(''),
     [luckyWheel, setLuckyWheel] = useState<{
       playerIndex: number;
       spinning: boolean;
@@ -1357,12 +1358,15 @@ function AdminConsole() {
     team = s.leader >= 0 ? s.teams[s.leader] : null;
   const auctionRunning =
     s.obsMode === 'auction' && s.projectorMode === 'auction';
+  const normalizedPlayerSearch = playerSearch.trim().toLocaleLowerCase();
   const filteredPlayers = s.players
     .map((player, index) => ({ player, index }))
     .filter(
       ({ player }) =>
         (playerSetFilter === 'all' || player.set === playerSetFilter) &&
-        (playerStatusFilter === 'all' || player.result === playerStatusFilter),
+        (playerStatusFilter === 'all' || player.result === playerStatusFilter) &&
+        (!normalizedPlayerSearch ||
+          player.name.toLocaleLowerCase().includes(normalizedPlayerSearch)),
     );
   const patchPlayer = (i: number, patch: Partial<Player>) =>
     setS({
@@ -2521,6 +2525,16 @@ function AdminConsole() {
             </span>
           </div>
           <div className="player-filters">
+            <section className="player-search-filter">
+              <small>SEARCH PLAYER</small>
+              <input
+                type="search"
+                value={playerSearch}
+                onChange={(event) => setPlayerSearch(event.target.value)}
+                placeholder="Enter player name"
+                aria-label="Search players by name"
+              />
+            </section>
             <section>
               <small>FILTER BY SET</small>
               <div>

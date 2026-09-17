@@ -23,6 +23,7 @@ import {
   Pause,
   FerrisWheel,
   CircleDotDashed,
+  FileDown,
 } from 'lucide-react';
 import playerManifest from '../player-import.json';
 import { cachePlayerPhotos, loadPlayerPhoto, removeOldPlayerPhotos } from './player-photo-cache';
@@ -2544,6 +2545,126 @@ function AdminConsole() {
       })),
     });
   };
+  const exportAuctionResultsPdf = async () => {
+    const soldPlayers = s.players.filter((player) => player.result === 'sold');
+    if (!soldPlayers.length) {
+      window.alert('No sold players are available to export yet.');
+      return;
+    }
+    const { jsPDF } = await import('jspdf');
+    const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 14;
+    const contentWidth = pageWidth - margin * 2;
+    let y = 18;
+    const ensureSpace = (height: number) => {
+      if (y + height <= pageHeight - 18) return;
+      doc.addPage();
+      y = 18;
+    };
+
+    doc.setTextColor(24, 49, 60);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(19);
+    doc.text(s.branding.tournament || 'Tournament Auction', margin, y);
+    y += 8;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(91, 111, 120);
+    doc.text('Auction results - ' + new Date().toLocaleDateString('en-IN'), margin, y);
+    doc.text('Sold players: ' + soldPlayers.length, pageWidth - margin, y, {
+      align: 'right',
+    });
+    y += 10;
+
+    s.teams.forEach((team, teamIndex) => {
+      const roster = soldPlayers.filter((player) => player.soldTo === teamIndex);
+      const totalSpent = roster.reduce((sum, player) => sum + player.soldPrice, 0);
+      ensureSpace(28);
+      doc.setFillColor(24, 49, 60);
+      doc.roundedRect(margin, y, contentWidth, 12, 2, 2, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text(team.name, margin + 4, y + 7.7);
+      doc.setFontSize(9);
+      doc.text(roster.length + ' players', pageWidth - margin - 4, y + 7.7, {
+        align: 'right',
+      });
+      y += 15;
+
+      doc.setFillColor(232, 237, 240);
+      doc.rect(margin, y, contentWidth, 8, 'F');
+      doc.setTextColor(65, 83, 91);
+      doc.setFontSize(8);
+      doc.text('PLAYER', margin + 3, y + 5.3);
+      doc.text('SET', margin + 99, y + 5.3);
+      doc.text('AGE', margin + 121, y + 5.3);
+      doc.text('SOLD AMOUNT', pageWidth - margin - 3, y + 5.3, { align: 'right' });
+      y += 8;
+
+      if (!roster.length) {
+        doc.setFont('helvetica', 'italic');
+        doc.setTextColor(120, 130, 135);
+        doc.text('No players purchased', margin + 3, y + 6);
+        y += 10;
+      } else {
+        roster.forEach((player, rowIndex) => {
+          const nameLines = doc.splitTextToSize(player.name, 88) as string[];
+          const rowHeight = Math.max(9, nameLines.length * 4.2 + 3);
+          ensureSpace(rowHeight + 12);
+          if (rowIndex % 2 === 1) {
+            doc.setFillColor(247, 249, 250);
+            doc.rect(margin, y, contentWidth, rowHeight, 'F');
+          }
+          doc.setTextColor(30, 48, 56);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(9);
+          doc.text(nameLines, margin + 3, y + 5.8);
+          doc.setFont('helvetica', 'normal');
+          doc.text(player.set, margin + 99, y + 5.8);
+          doc.text(player.age ? String(player.age) : '-', margin + 121, y + 5.8);
+          doc.setFont('helvetica', 'bold');
+          doc.text(pts(player.soldPrice), pageWidth - margin - 3, y + 5.8, {
+            align: 'right',
+          });
+          y += rowHeight;
+        });
+      }
+
+      ensureSpace(12);
+      doc.setDrawColor(205, 215, 220);
+      doc.line(margin, y, pageWidth - margin, y);
+      y += 6;
+      doc.setTextColor(40, 58, 66);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.text('TOTAL SPENT  ' + pts(totalSpent), margin + 3, y);
+      doc.text(
+        'BALANCE LEFT  ' + pts(s.rules.teamWallet - totalSpent),
+        pageWidth - margin - 3,
+        y,
+        { align: 'right' },
+      );
+      y += 11;
+    });
+
+    const pageCount = doc.getNumberOfPages();
+    for (let page = 1; page <= pageCount; page += 1) {
+      doc.setPage(page);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(120, 130, 135);
+      doc.text(
+        'Page ' + page + ' of ' + pageCount,
+        pageWidth - margin,
+        pageHeight - 8,
+        { align: 'right' },
+      );
+    }
+    doc.save('auction-results-' + new Date().toISOString().slice(0, 10) + '.pdf');
+  };
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
@@ -3611,6 +3732,24 @@ function AdminConsole() {
                   </button>
                 </article>
               ))}
+            </div>
+            <div className="export-auction-settings">
+              <span>
+                <small>AUCTION REPORT</small>
+                <h2>Export team results</h2>
+                <p>
+                  Download a PDF containing every team, purchased player, sold
+                  amount, total spent, and remaining balance.
+                </p>
+              </span>
+              <button
+                type="button"
+                onClick={exportAuctionResultsPdf}
+                disabled={!s.players.some((player) => player.result === 'sold')}
+              >
+                <FileDown />
+                Export Results PDF
+              </button>
             </div>
             <div className="reset-auction-settings">
               <span>

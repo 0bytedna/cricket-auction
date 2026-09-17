@@ -110,6 +110,7 @@ type AState = {
   tickerSpeed: number;
   wheelSpinDuration: number;
   playerDatabaseUrl: string;
+  teamDatabaseUrl: string;
   teams: Team[];
   players: Player[];
   bidHistory: { bid: number; leader: number }[];
@@ -189,6 +190,7 @@ const initial: AState = {
   wheelSpinDuration: 5,
   playerDatabaseUrl:
     'https://docs.google.com/spreadsheets/d/e/2PACX-1vTJSkmTO0aDVXFo1oY7TlqOo7GkfAlrrlxl7mBgMhDKAe5rSPnQVHDDD5gxQ6ptpv7S1L5JMT_-kZyR/pub?output=xlsx',
+  teamDatabaseUrl: '',
   teams,
   players: seedPlayers,
   bidHistory: [],
@@ -217,6 +219,7 @@ const settingsSnapshot = (state: AState) => ({
   teams: state.teams,
   branding: state.branding,
   playerDatabaseUrl: state.playerDatabaseUrl,
+  teamDatabaseUrl: state.teamDatabaseUrl,
   randomPlayerSelection: state.randomPlayerSelection,
   activeSet: state.activeSet,
   tickerSpeed: state.tickerSpeed,
@@ -427,6 +430,40 @@ const publishLiveAuction = (state: AState) =>
     body: JSON.stringify(state),
     cache: 'no-store',
   }).catch(() => undefined);
+const loadSharedAuction = async (): Promise<AState | null> => {
+  try {
+    const response = await fetch('/api/remote-auction', { cache: 'no-store' });
+    if (!response.ok) return null;
+    const result = await response.json();
+    return result?.state?.players ? result.state : null;
+  } catch {
+    return null;
+  }
+};
+let sharedSaveTimer = 0;
+let sharedPendingState: AState | null = null;
+let sharedSaveChain = Promise.resolve();
+const scheduleSharedAuctionSave = (state: AState) => {
+  sharedPendingState = state;
+  window.clearTimeout(sharedSaveTimer);
+  sharedSaveTimer = window.setTimeout(() => {
+    const pending = sharedPendingState;
+    sharedPendingState = null;
+    if (!pending) return;
+    sharedSaveChain = sharedSaveChain.then(async () => {
+      await fetch('/api/remote-auction', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin-Password':
+            localStorage.getItem('boundaryx-admin-password') || '',
+        },
+        body: JSON.stringify(pending),
+        cache: 'no-store',
+      });
+    }).catch(() => undefined);
+  }, 700);
+};
 
 function useAuction(role: AuctionClientRole) {
   const [s, setS] = useState<AState>(initial);
@@ -437,7 +474,8 @@ function useAuction(role: AuctionClientRole) {
     let events: EventSource | null = null;
     if (role === 'admin') {
       void (async () => {
-        const persistent = await loadPersistentAuction();
+        const sharedState = await loadSharedAuction();
+        const persistent = sharedState || (await loadPersistentAuction());
         if (!active) return;
         let restored: AState = persistent || initial;
         try {
@@ -448,7 +486,9 @@ function useAuction(role: AuctionClientRole) {
         } catch {
           // Keep the safe initial state if legacy storage is unreadable.
         }
-        const hydrated = normalize({ ...restored, ...readLocalSettings() });
+        const hydrated = normalize(
+          sharedState ? restored : { ...restored, ...readLocalSettings() },
+        );
         const paused: AState = {
           ...hydrated,
           obsMode: 'resting',
@@ -465,6 +505,7 @@ function useAuction(role: AuctionClientRole) {
           // IndexedDB remains the primary copy for larger auction state.
         }
         void publishLiveAuction(paused);
+        scheduleSharedAuctionSave(paused);
       })();
     } else {
       const acceptLiveState = (live: any) => {
@@ -545,6 +586,7 @@ function useAuction(role: AuctionClientRole) {
       // Server publication below also reaches Projector and OBS.
     }
     if (role === 'admin') void publishLiveAuction(n);
+    if (role === 'admin') scheduleSharedAuctionSave(n);
   };
   return [s, update] as const;
 }
@@ -1367,6 +1409,11 @@ function AdminConsole() {
       message: '',
       error: false,
     }),
+    [teamDatabaseImport, setTeamDatabaseImport] = useState({
+      running: false,
+      message: '',
+      error: false,
+    }),
     [downloadedPlayers, setDownloadedPlayers] = useState<Player[] | null>(null);
   const p = s.players[s.player],
     team = s.leader >= 0 ? s.teams[s.leader] : null;
@@ -1622,6 +1669,54 @@ function AdminConsole() {
         total: 1,
         message:
           error instanceof Error ? error.message : 'Database refresh failed',
+        error: true,
+      });
+    }
+  };
+  const downloadTeamDatabase = async () => {
+    if (!s.teamDatabaseUrl || teamDatabaseImport.running) return;
+    if (s.players.some((player) => player.result === 'sold')) {
+      setTeamDatabaseImport({
+        running: false,
+        message: 'Reset the auction before replacing the team database.',
+        error: true,
+      });
+      return;
+    }
+    setTeamDatabaseImport({
+      running: true,
+      message: 'Downloading team names and logos...',
+      error: false,
+    });
+    try {
+      const response = await fetch('/api/refresh-team-database', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin-Password':
+            localStorage.getItem('boundaryx-admin-password') || '',
+        },
+        body: JSON.stringify({ url: s.teamDatabaseUrl }),
+      });
+      const result = (await response.json()) as {
+        teams?: Array<{ code: string; name: string; logo: string }>;
+        error?: string;
+      };
+      if (!response.ok || !result.teams)
+        throw new Error(result.error || 'Team database refresh failed');
+      const nextTeams = result.teams.map((team) => ({
+        ...team,
+        budget: s.rules.teamWallet,
+      }));
+      setS({ ...s, teams: nextTeams });
+      const message = nextTeams.length + ' teams downloaded and applied.';
+      setTeamDatabaseImport({ running: false, message, error: false });
+      window.alert(message);
+    } catch (error) {
+      setTeamDatabaseImport({
+        running: false,
+        message:
+          error instanceof Error ? error.message : 'Team database refresh failed',
         error: true,
       });
     }
@@ -3148,6 +3243,57 @@ function AdminConsole() {
                 )}
               </div>
             </div>
+            <div className="player-database-settings">
+              <header>
+                <small>TEAM DATABASE</small>
+                <h2>Published spreadsheet link</h2>
+                <p>
+                  Download team names and logos from a published XLS or XLSX
+                  sheet containing Team Name and Logo columns.
+                </p>
+              </header>
+              <div className="database-download-control">
+                <label>
+                  <span>Published team database XLS URL</span>
+                  <input
+                    type="url"
+                    inputMode="url"
+                    placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=xlsx"
+                    value={s.teamDatabaseUrl}
+                    disabled={teamDatabaseImport.running}
+                    onChange={(event) =>
+                      setS({
+                        ...s,
+                        teamDatabaseUrl: event.target.value.trim(),
+                      })
+                    }
+                  />
+                  <small>
+                    Saved to the shared Google JSON after synchronization is configured.
+                  </small>
+                </label>
+                <button
+                  type="button"
+                  className="download-database-button"
+                  disabled={!s.teamDatabaseUrl || teamDatabaseImport.running}
+                  onClick={downloadTeamDatabase}
+                >
+                  {teamDatabaseImport.running
+                    ? 'Downloading team database...'
+                    : 'Download and apply team database'}
+                </button>
+                {teamDatabaseImport.message && (
+                  <div
+                    className={
+                      'database-progress ' +
+                      (teamDatabaseImport.error ? 'error' : '')
+                    }
+                  >
+                    <span>{teamDatabaseImport.message}</span>
+                  </div>
+                )}
+              </div>
+            </div>
             <div className="branding-settings">
               <header>
                 <small>EVENT BRANDING</small>
@@ -3307,26 +3453,52 @@ export function Admin() {
     [error, setError] = useState(''),
     [isSetup, setIsSetup] = useState(false);
   useEffect(() => {
-    setIsSetup(!localStorage.getItem('boundaryx-admin-password'));
+    void (async () => {
+      try {
+        const response = await fetch('/api/admin-auth', { cache: 'no-store' });
+        const result = await response.json();
+        setIsSetup(
+          !result.configured &&
+            !localStorage.getItem('boundaryx-admin-password'),
+        );
+      } catch {
+        setIsSetup(!localStorage.getItem('boundaryx-admin-password'));
+      }
+      setReady(true);
+    })();
     void fetch('/api/auction-pause', { method: 'POST', keepalive: true });
-    setReady(true);
   }, []);
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (value.length < 6) {
       setError('Use at least 6 characters');
       return;
     }
+    try {
+      const response = await fetch('/api/admin-auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: value }),
+      });
+      if (response.ok) {
+        localStorage.setItem('boundaryx-admin-password', value);
+        void fetch('/api/auction-pause', { method: 'POST', keepalive: true });
+        setUnlocked(true);
+        return;
+      }
+      if (response.status !== 503) {
+        setError('Incorrect password');
+        return;
+      }
+    } catch {
+      // Local-only development falls back to the device password below.
+    }
     const saved = localStorage.getItem('boundaryx-admin-password');
-    if (!saved) {
+    if (!saved || saved === value) {
       localStorage.setItem('boundaryx-admin-password', value);
       void fetch('/api/auction-pause', { method: 'POST', keepalive: true });
       setUnlocked(true);
-    } else if (saved === value) {
-      void fetch('/api/auction-pause', { method: 'POST', keepalive: true });
-      setUnlocked(true);
-    }
-    else setError('Incorrect password');
+    } else setError('Incorrect password');
   };
   if (!ready) return null;
   if (!unlocked)

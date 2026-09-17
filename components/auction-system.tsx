@@ -1380,6 +1380,8 @@ function AdminConsole() {
     }),
     [settingsDatabaseImport, setSettingsDatabaseImport] = useState({
       running: false,
+      completed: 0,
+      total: 4,
       message: '',
       error: false,
     }),
@@ -1694,6 +1696,8 @@ function AdminConsole() {
     if (!s.settingsDatabaseUrl || settingsDatabaseImport.running) return;
     setSettingsDatabaseImport({
       running: true,
+      completed: 0,
+      total: 4,
       message: 'Downloading tournament settings...',
       error: false,
     });
@@ -1728,7 +1732,7 @@ function AdminConsole() {
       const importedRules = compact(imported.rules || {});
       const importedCelebration = compact(imported.celebration || {});
       const importedBranding = compact(imported.branding || {});
-      const next = normalize({
+      let next = normalize({
         ...s,
         settingsDatabaseUrl: s.settingsDatabaseUrl,
         playerDatabaseUrl:
@@ -1757,16 +1761,133 @@ function AdminConsole() {
         },
         branding: { ...s.branding, ...importedBranding },
       });
+      setSettingsDatabaseImport({
+        running: true,
+        completed: 1,
+        total: 4,
+        message: 'Settings applied. Downloading team database...',
+        error: false,
+      });
+
+      let teamCount = next.teams.length;
+      let teamSkipped = false;
+      if (next.teamDatabaseUrl) {
+        const teamResponse = await fetch('/api/refresh-team-database', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Admin-Password':
+              localStorage.getItem('boundaryx-admin-password') || '',
+          },
+          body: JSON.stringify({ url: next.teamDatabaseUrl }),
+        });
+        const teamResult = (await teamResponse.json()) as {
+          teams?: Array<{ code: string; name: string; logo: string }>;
+          error?: string;
+        };
+        if (!teamResponse.ok || !teamResult.teams)
+          throw new Error(teamResult.error || 'Team database refresh failed');
+        next = {
+          ...next,
+          teams: teamResult.teams.map((team) => ({
+            ...team,
+            budget: next.rules.teamWallet,
+          })),
+        };
+        teamCount = next.teams.length;
+      } else {
+        teamSkipped = true;
+      }
+
+      setSettingsDatabaseImport({
+        running: true,
+        completed: 2,
+        total: 4,
+        message: 'Team database finished. Downloading player database...',
+        error: false,
+      });
+
+      let playerCount = next.players.length;
+      let placeholderCount = 0;
+      let playerSkipped = false;
+      if (next.playerDatabaseUrl) {
+        const playerResponse = await fetch('/api/refresh-player-database', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Admin-Password':
+              localStorage.getItem('boundaryx-admin-password') || '',
+          },
+          body: JSON.stringify({ url: next.playerDatabaseUrl }),
+        });
+        const playerResult = (await playerResponse.json()) as {
+          players?: Array<{
+            name: string;
+            age: number;
+            image: string;
+            set: PlayerSet;
+          }>;
+          placeholders?: number;
+          error?: string;
+        };
+        if (!playerResponse.ok || !playerResult.players)
+          throw new Error(playerResult.error || 'Player database refresh failed');
+        const players = playerResult.players.map((player) => ({
+          ...registeredPlayer(player.name, player.age, player.image),
+          base: next.rules.minPoints,
+          set: normalizePlayerSet(player.set),
+        }));
+        playerCount = players.length;
+        placeholderCount = playerResult.placeholders || 0;
+        next = {
+          ...next,
+          player: 0,
+          activeSet: players[0]?.set || 'A',
+          bid: next.rules.minPoints,
+          leader: -1,
+          status: 'live',
+          bidHistory: [],
+          playerNavigationHistory: players.length ? [0] : [],
+          playerNavigationPosition: 0,
+          luckyWheelSpin: null,
+          celebrationAt: 0,
+          players,
+        };
+
+        const photoSources = players.map((player) => player.image);
+        await removeOldPlayerPhotos(photoSources).catch(() => {});
+        await cachePlayerPhotos(photoSources, (completed, total) => {
+          setSettingsDatabaseImport({
+            running: true,
+            completed: 3 + completed,
+            total: 3 + Math.max(1, total),
+            message: 'Saving player photos: ' + completed + ' / ' + total,
+            error: false,
+          });
+        });
+      } else {
+        playerSkipped = true;
+      }
+
       setS(next);
       const message =
-        'Settings applied. Players per team: ' +
-        next.rules.maxPlayers +
-        '. Saved on this device.';
-      setSettingsDatabaseImport({ running: false, message, error: false });
+        'Refresh complete. Players per team: ' + next.rules.maxPlayers +
+        '. Teams: ' + (teamSkipped ? 'skipped (URL missing)' : teamCount) +
+        '. Players: ' + (playerSkipped ? 'skipped (URL missing)' : playerCount) +
+        (placeholderCount ? ' (' + placeholderCount + ' placeholder photos).' : '.');
+      setSettingsDatabaseImport({
+        running: false,
+        completed: 4,
+        total: 4,
+        message,
+        error: false,
+      });
       window.alert(message);
     } catch (error) {
       setSettingsDatabaseImport({
         running: false,
+        completed: 0,
+        total: 4,
         message:
           error instanceof Error ? error.message : 'Settings download failed',
         error: true,
@@ -3243,7 +3364,7 @@ function AdminConsole() {
                 <small>Enter a value from 10 to 1,000.</small>
               </label>
             </div>
-            <div className="player-database-settings">
+            <div className="player-database-settings settings-database-primary">
               <header>
                 <small>SETTINGS DATABASE</small>
                 <h2>Published spreadsheet link</h2>
@@ -3282,13 +3403,16 @@ function AdminConsole() {
                   type="button"
                   className="download-database-button"
                   disabled={
-                    !s.settingsDatabaseUrl || settingsDatabaseImport.running
+                    !s.settingsDatabaseUrl ||
+                    settingsDatabaseImport.running ||
+                    databaseImport.running ||
+                    teamDatabaseImport.running
                   }
                   onClick={downloadSettingsDatabase}
                 >
                   {settingsDatabaseImport.running
-                    ? 'Downloading settings...'
-                    : 'Download and apply settings'}
+                    ? 'Refreshing tournament database...'
+                    : 'Download settings, teams, and players'}
                 </button>
                 {settingsDatabaseImport.message && (
                   <div
@@ -3297,6 +3421,10 @@ function AdminConsole() {
                       (settingsDatabaseImport.error ? 'error' : '')
                     }
                   >
+                    <progress
+                      max={Math.max(1, settingsDatabaseImport.total)}
+                      value={settingsDatabaseImport.completed}
+                    />
                     <span>{settingsDatabaseImport.message}</span>
                   </div>
                 )}
@@ -3320,7 +3448,11 @@ function AdminConsole() {
                 <button
                   type="button"
                   className="download-database-button"
-                  disabled={!s.playerDatabaseUrl || databaseImport.running}
+                  disabled={
+                    !s.playerDatabaseUrl ||
+                    databaseImport.running ||
+                    settingsDatabaseImport.running
+                  }
                   onClick={downloadPlayerDatabase}
                 >
                   {databaseImport.running
@@ -3361,7 +3493,11 @@ function AdminConsole() {
                 <button
                   type="button"
                   className="download-database-button"
-                  disabled={!s.teamDatabaseUrl || teamDatabaseImport.running}
+                  disabled={
+                    !s.teamDatabaseUrl ||
+                    teamDatabaseImport.running ||
+                    settingsDatabaseImport.running
+                  }
                   onClick={downloadTeamDatabase}
                 >
                   {teamDatabaseImport.running

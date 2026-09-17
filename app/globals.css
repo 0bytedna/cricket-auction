@@ -2773,6 +2773,9 @@ a {
   border-radius: 11px;
   background: #f7f9fa;
 }
+.settings-database-primary {
+  order: -1;
+}
 .player-database-settings header small {
   color: #566b75;
   font-size: 9px;

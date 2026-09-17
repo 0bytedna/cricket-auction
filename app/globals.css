@@ -2775,6 +2775,20 @@ a {
 }
 .settings-database-primary {
   order: -3;
+  grid-template-columns: 1fr;
+  align-items: stretch;
+  gap: 14px;
+}
+.settings-database-primary header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+}
+.settings-database-primary header p {
+  max-width: 560px;
+  margin: 0;
+  text-align: right;
 }
 .database-action-grid {
   display: grid;
@@ -2856,6 +2870,13 @@ a {
   }
   .database-action-grid {
     grid-template-columns: 1fr;
+  }
+  .settings-database-primary header {
+    display: block;
+  }
+  .settings-database-primary header p {
+    margin-top: 6px;
+    text-align: left;
   }
 }
 .celebration-settings > header {

@@ -192,7 +192,8 @@ const initial: AState = {
   playerDatabaseUrl:
     'https://docs.google.com/spreadsheets/d/e/2PACX-1vTJSkmTO0aDVXFo1oY7TlqOo7GkfAlrrlxl7mBgMhDKAe5rSPnQVHDDD5gxQ6ptpv7S1L5JMT_-kZyR/pub?output=xlsx',
   teamDatabaseUrl: '',
-  settingsDatabaseUrl: '',
+  settingsDatabaseUrl:
+    'https://docs.google.com/spreadsheets/d/e/2PACX-1vS5GxFIWR-KoGq8Z46S64iwO0aOBVfPd27JgbtKCKFJfAejnL2GKprrIwP0768YXhBHnT0kKYpA43ig/pub?output=xlsx',
   teams,
   players: seedPlayers,
   bidHistory: [],
@@ -1724,19 +1725,43 @@ function AdminConsole() {
             ([, entry]) => entry !== undefined && entry !== '',
           ),
         ) as Partial<T>;
+      const importedRules = compact(imported.rules || {});
+      const importedCelebration = compact(imported.celebration || {});
+      const importedBranding = compact(imported.branding || {});
       const next = normalize({
         ...s,
-        ...compact(imported as Record<string, unknown>),
         settingsDatabaseUrl: s.settingsDatabaseUrl,
-        rules: { ...s.rules, ...compact(imported.rules || {}) },
+        playerDatabaseUrl:
+          imported.playerDatabaseUrl || s.playerDatabaseUrl,
+        teamDatabaseUrl: imported.teamDatabaseUrl || s.teamDatabaseUrl,
+        randomPlayerSelection:
+          typeof imported.randomPlayerSelection === 'boolean'
+            ? imported.randomPlayerSelection
+            : s.randomPlayerSelection,
+        tickerSpeed:
+          typeof imported.tickerSpeed === 'number'
+            ? imported.tickerSpeed
+            : s.tickerSpeed,
+        wheelSpinDuration:
+          typeof imported.wheelSpinDuration === 'number'
+            ? imported.wheelSpinDuration
+            : s.wheelSpinDuration,
+        celebrationMuted:
+          typeof imported.celebrationMuted === 'boolean'
+            ? imported.celebrationMuted
+            : s.celebrationMuted,
+        rules: { ...s.rules, ...importedRules },
         celebration: {
           ...s.celebration,
-          ...compact(imported.celebration || {}),
+          ...importedCelebration,
         },
-        branding: { ...s.branding, ...compact(imported.branding || {}) },
+        branding: { ...s.branding, ...importedBranding },
       });
       setS(next);
-      const message = 'Settings downloaded, applied, and saved on this device.';
+      const message =
+        'Settings applied. Players per team: ' +
+        next.rules.maxPlayers +
+        '. Saved on this device.';
       setSettingsDatabaseImport({ running: false, message, error: false });
       window.alert(message);
     } catch (error) {
@@ -3287,23 +3312,11 @@ function AdminConsole() {
                 </p>
               </header>
               <div className="database-download-control">
-                <label>
-                  <span>Published Google Sheets XLS URL</span>
-                  <input
-                    type="url"
-                    inputMode="url"
-                    placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=xlsx"
-                    value={s.playerDatabaseUrl}
-                    disabled={databaseImport.running}
-                    onChange={(event) =>
-                      setS({
-                        ...s,
-                        playerDatabaseUrl: event.target.value.trim(),
-                      })
-                    }
-                  />
-                  <small>Saved automatically on this device.</small>
-                </label>
+                <p className="database-source-status">
+                  {s.playerDatabaseUrl
+                    ? 'Player database source loaded from the Settings spreadsheet.'
+                    : 'Add Player Database URL to the Settings spreadsheet first.'}
+                </p>
                 <button
                   type="button"
                   className="download-database-button"
@@ -3340,25 +3353,11 @@ function AdminConsole() {
                 </p>
               </header>
               <div className="database-download-control">
-                <label>
-                  <span>Published team database XLS URL</span>
-                  <input
-                    type="url"
-                    inputMode="url"
-                    placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=xlsx"
-                    value={s.teamDatabaseUrl}
-                    disabled={teamDatabaseImport.running}
-                    onChange={(event) =>
-                      setS({
-                        ...s,
-                        teamDatabaseUrl: event.target.value.trim(),
-                      })
-                    }
-                  />
-                  <small>
-                    Saved automatically on this device.
-                  </small>
-                </label>
+                <p className="database-source-status">
+                  {s.teamDatabaseUrl
+                    ? 'Team database source loaded from the Settings spreadsheet.'
+                    : 'Add Team Database URL to the Settings spreadsheet first.'}
+                </p>
                 <button
                   type="button"
                   className="download-database-button"

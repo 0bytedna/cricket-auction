@@ -2797,6 +2797,13 @@ a {
   display: grid;
   gap: 12px;
 }
+.database-source-status {
+  margin: 0;
+  color: #526872;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
 .download-database-button,
 .apply-database-button {
   min-height: 44px;

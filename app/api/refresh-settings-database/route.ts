@@ -94,7 +94,9 @@ export async function POST(request: Request) {
     const version = Date.now().toString();
     const settings = {
       rules: {
-        maxPlayers: numberValue(get('Players Per Team', 'Max Players')),
+        maxPlayers: numberValue(
+          get('Players Per Team', 'Number of Players in Each Team', 'Max Players'),
+        ),
         maxPoints: numberValue(get('Max Points Per Player', 'Max Points')),
         minPoints: numberValue(get('Minimum Points Per Player', 'Min Points')),
         teamWallet: numberValue(get('Team Wallet Total Points', 'Team Wallet')),

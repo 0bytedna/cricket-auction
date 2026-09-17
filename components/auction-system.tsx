@@ -111,6 +111,7 @@ type AState = {
   wheelSpinDuration: number;
   playerDatabaseUrl: string;
   teamDatabaseUrl: string;
+  settingsDatabaseUrl: string;
   teams: Team[];
   players: Player[];
   bidHistory: { bid: number; leader: number }[];
@@ -191,6 +192,7 @@ const initial: AState = {
   playerDatabaseUrl:
     'https://docs.google.com/spreadsheets/d/e/2PACX-1vTJSkmTO0aDVXFo1oY7TlqOo7GkfAlrrlxl7mBgMhDKAe5rSPnQVHDDD5gxQ6ptpv7S1L5JMT_-kZyR/pub?output=xlsx',
   teamDatabaseUrl: '',
+  settingsDatabaseUrl: '',
   teams,
   players: seedPlayers,
   bidHistory: [],
@@ -220,6 +222,7 @@ const settingsSnapshot = (state: AState) => ({
   branding: state.branding,
   playerDatabaseUrl: state.playerDatabaseUrl,
   teamDatabaseUrl: state.teamDatabaseUrl,
+  settingsDatabaseUrl: state.settingsDatabaseUrl,
   randomPlayerSelection: state.randomPlayerSelection,
   activeSet: state.activeSet,
   tickerSpeed: state.tickerSpeed,
@@ -430,41 +433,6 @@ const publishLiveAuction = (state: AState) =>
     body: JSON.stringify(state),
     cache: 'no-store',
   }).catch(() => undefined);
-const loadSharedAuction = async (): Promise<AState | null> => {
-  try {
-    const response = await fetch('/api/remote-auction', { cache: 'no-store' });
-    if (!response.ok) return null;
-    const result = await response.json();
-    return result?.state?.players ? result.state : null;
-  } catch {
-    return null;
-  }
-};
-let sharedSaveTimer = 0;
-let sharedPendingState: AState | null = null;
-let sharedSaveChain = Promise.resolve();
-const scheduleSharedAuctionSave = (state: AState) => {
-  sharedPendingState = state;
-  window.clearTimeout(sharedSaveTimer);
-  sharedSaveTimer = window.setTimeout(() => {
-    const pending = sharedPendingState;
-    sharedPendingState = null;
-    if (!pending) return;
-    sharedSaveChain = sharedSaveChain.then(async () => {
-      await fetch('/api/remote-auction', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Admin-Password':
-            localStorage.getItem('boundaryx-admin-password') || '',
-        },
-        body: JSON.stringify(pending),
-        cache: 'no-store',
-      });
-    }).catch(() => undefined);
-  }, 700);
-};
-
 function useAuction(role: AuctionClientRole) {
   const [s, setS] = useState<AState>(initial);
   useEffect(() => {
@@ -474,8 +442,7 @@ function useAuction(role: AuctionClientRole) {
     let events: EventSource | null = null;
     if (role === 'admin') {
       void (async () => {
-        const sharedState = await loadSharedAuction();
-        const persistent = sharedState || (await loadPersistentAuction());
+        const persistent = await loadPersistentAuction();
         if (!active) return;
         let restored: AState = persistent || initial;
         try {
@@ -486,9 +453,7 @@ function useAuction(role: AuctionClientRole) {
         } catch {
           // Keep the safe initial state if legacy storage is unreadable.
         }
-        const hydrated = normalize(
-          sharedState ? restored : { ...restored, ...readLocalSettings() },
-        );
+        const hydrated = normalize({ ...restored, ...readLocalSettings() });
         const paused: AState = {
           ...hydrated,
           obsMode: 'resting',
@@ -505,7 +470,6 @@ function useAuction(role: AuctionClientRole) {
           // IndexedDB remains the primary copy for larger auction state.
         }
         void publishLiveAuction(paused);
-        scheduleSharedAuctionSave(paused);
       })();
     } else {
       const acceptLiveState = (live: any) => {
@@ -586,7 +550,6 @@ function useAuction(role: AuctionClientRole) {
       // Server publication below also reaches Projector and OBS.
     }
     if (role === 'admin') void publishLiveAuction(n);
-    if (role === 'admin') scheduleSharedAuctionSave(n);
   };
   return [s, update] as const;
 }
@@ -1414,6 +1377,11 @@ function AdminConsole() {
       message: '',
       error: false,
     }),
+    [settingsDatabaseImport, setSettingsDatabaseImport] = useState({
+      running: false,
+      message: '',
+      error: false,
+    }),
     [downloadedPlayers, setDownloadedPlayers] = useState<Player[] | null>(null);
   const p = s.players[s.player],
     team = s.leader >= 0 ? s.teams[s.leader] : null;
@@ -1717,6 +1685,65 @@ function AdminConsole() {
         running: false,
         message:
           error instanceof Error ? error.message : 'Team database refresh failed',
+        error: true,
+      });
+    }
+  };
+  const downloadSettingsDatabase = async () => {
+    if (!s.settingsDatabaseUrl || settingsDatabaseImport.running) return;
+    setSettingsDatabaseImport({
+      running: true,
+      message: 'Downloading tournament settings...',
+      error: false,
+    });
+    try {
+      const response = await fetch('/api/refresh-settings-database', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin-Password':
+            localStorage.getItem('boundaryx-admin-password') || '',
+        },
+        body: JSON.stringify({ url: s.settingsDatabaseUrl }),
+      });
+      const result = (await response.json()) as {
+        settings?: Partial<AState> & {
+          rules?: Partial<AuctionRules>;
+          celebration?: Partial<AState['celebration']>;
+          branding?: Partial<AState['branding']>;
+        };
+        error?: string;
+      };
+      if (!response.ok || !result.settings)
+        throw new Error(result.error || 'Settings download failed');
+
+      const imported = result.settings;
+      const compact = <T extends Record<string, unknown>>(value: T) =>
+        Object.fromEntries(
+          Object.entries(value).filter(
+            ([, entry]) => entry !== undefined && entry !== '',
+          ),
+        ) as Partial<T>;
+      const next = normalize({
+        ...s,
+        ...compact(imported as Record<string, unknown>),
+        settingsDatabaseUrl: s.settingsDatabaseUrl,
+        rules: { ...s.rules, ...compact(imported.rules || {}) },
+        celebration: {
+          ...s.celebration,
+          ...compact(imported.celebration || {}),
+        },
+        branding: { ...s.branding, ...compact(imported.branding || {}) },
+      });
+      setS(next);
+      const message = 'Settings downloaded, applied, and saved on this device.';
+      setSettingsDatabaseImport({ running: false, message, error: false });
+      window.alert(message);
+    } catch (error) {
+      setSettingsDatabaseImport({
+        running: false,
+        message:
+          error instanceof Error ? error.message : 'Settings download failed',
         error: true,
       });
     }
@@ -3031,8 +3058,9 @@ function AdminConsole() {
               <small>ADMIN SETTINGS</small>
               <h1>Auction settings</h1>
               <p>
-                Configure auction rules, team wallets, and the branding used by
-                the OBS and Projector home screens.
+                Import starting values from your spreadsheet, then change any
+                setting here at any time during the auction. Changes apply
+                immediately and are saved on this device.
               </p>
             </span>
             <Settings />
@@ -3192,6 +3220,65 @@ function AdminConsole() {
             </div>
             <div className="player-database-settings">
               <header>
+                <small>SETTINGS DATABASE</small>
+                <h2>Published spreadsheet link</h2>
+                <p>
+                  Download and immediately apply tournament settings from a
+                  sheet containing Setting and Value columns. Imported values
+                  remain editable in the controls below.
+                </p>
+              </header>
+              <div className="database-download-control">
+                <label>
+                  <span>Published settings XLS URL</span>
+                  <input
+                    type="url"
+                    inputMode="url"
+                    placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=xlsx"
+                    value={s.settingsDatabaseUrl}
+                    disabled={settingsDatabaseImport.running}
+                    onChange={(event) =>
+                      setS({
+                        ...s,
+                        settingsDatabaseUrl: event.target.value.trim(),
+                      })
+                    }
+                  />
+                  <small>
+                    Uses Setting and Value columns. The link and imported
+                    settings are saved on this device. You can start with the{' '}
+                    <a href="/settings-database-template.csv" download>
+                      settings template
+                    </a>
+                    .
+                  </small>
+                </label>
+                <button
+                  type="button"
+                  className="download-database-button"
+                  disabled={
+                    !s.settingsDatabaseUrl || settingsDatabaseImport.running
+                  }
+                  onClick={downloadSettingsDatabase}
+                >
+                  {settingsDatabaseImport.running
+                    ? 'Downloading settings...'
+                    : 'Download and apply settings'}
+                </button>
+                {settingsDatabaseImport.message && (
+                  <div
+                    className={
+                      'database-progress ' +
+                      (settingsDatabaseImport.error ? 'error' : '')
+                    }
+                  >
+                    <span>{settingsDatabaseImport.message}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="player-database-settings">
+              <header>
                 <small>PLAYER DATABASE</small>
                 <h2>Published spreadsheet link</h2>
                 <p>
@@ -3269,7 +3356,7 @@ function AdminConsole() {
                     }
                   />
                   <small>
-                    Saved to the shared Google JSON after synchronization is configured.
+                    Saved automatically on this device.
                   </small>
                 </label>
                 <button

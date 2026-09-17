@@ -1358,6 +1358,7 @@ function AdminConsole() {
       playerIndex: number;
       spinning: boolean;
       winner: number;
+      teams: number[];
     } | null>(null),
     [databaseImport, setDatabaseImport] = useState({
       running: false,
@@ -2118,7 +2119,12 @@ function AdminConsole() {
     .filter(({ index }) => maxAllowedBid(s, index) >= s.rules.minPoints);
   const openLuckyWheel = (playerIndex: number) => {
     const participantIndexes = eligibleLuckyTeams.map(({ index }) => index);
-    setLuckyWheel({ playerIndex, spinning: false, winner: -1 });
+    setLuckyWheel({
+      playerIndex,
+      spinning: false,
+      winner: -1,
+      teams: participantIndexes,
+    });
     setS({
       ...s,
       luckyWheelSpin: participantIndexes.length
@@ -2132,19 +2138,52 @@ function AdminConsole() {
         : null,
     });
   };
+  const toggleLuckyWheelTeam = (teamIndex: number) => {
+    if (!luckyWheel || luckyWheel.spinning) return;
+    const eligible = eligibleLuckyTeams.some(({ index }) => index === teamIndex);
+    if (!eligible) return;
+    const teams = luckyWheel.teams.includes(teamIndex)
+      ? luckyWheel.teams.filter((index) => index !== teamIndex)
+      : eligibleLuckyTeams
+          .map(({ index }) => index)
+          .filter(
+            (index) => index === teamIndex || luckyWheel.teams.includes(index),
+          );
+    setLuckyWheel({ ...luckyWheel, teams, winner: -1 });
+    setS({
+      ...s,
+      luckyWheelSpin: {
+        playerIndex: luckyWheel.playerIndex,
+        teams,
+        winner: -1,
+        startedAt: 0,
+        duration: s.wheelSpinDuration * 1000,
+      },
+    });
+  };
   const spinLuckyWheel = () => {
-    if (!luckyWheel || luckyWheel.spinning || !eligibleLuckyTeams.length) return;
-    const winner =
-      eligibleLuckyTeams[Math.floor(Math.random() * eligibleLuckyTeams.length)]
-        .index;
+    if (!luckyWheel || luckyWheel.spinning) return;
+    const eligibleIndexes = new Set(
+      eligibleLuckyTeams.map(({ index }) => index),
+    );
+    const participants = luckyWheel.teams.filter((index) =>
+      eligibleIndexes.has(index),
+    );
+    if (!participants.length) return;
+    const winner = participants[Math.floor(Math.random() * participants.length)];
     const spin: LuckyWheelSpin = {
       playerIndex: luckyWheel.playerIndex,
-      teams: eligibleLuckyTeams.map(({ index }) => index),
+      teams: participants,
       winner,
       startedAt: Date.now(),
       duration: s.wheelSpinDuration * 1000,
     };
-    setLuckyWheel({ ...luckyWheel, spinning: true, winner: -1 });
+    setLuckyWheel({
+      ...luckyWheel,
+      teams: participants,
+      spinning: true,
+      winner: -1,
+    });
     setS({ ...s, luckyWheelSpin: spin });
     window.setTimeout(
       () =>
@@ -2740,7 +2779,42 @@ function AdminConsole() {
             <h2 id="lucky-wheel-title">
               {s.players[luckyWheel.playerIndex]?.name}
             </h2>
-            {eligibleLuckyTeams.length > 0 && (
+            <div className="lucky-wheel-team-selector">
+              <small>CHOOSE PARTICIPATING TEAMS</small>
+              <div>
+                {s.teams.map((wheelTeam, teamIndex) => {
+                  const eligible = eligibleLuckyTeams.some(
+                    ({ index }) => index === teamIndex,
+                  );
+                  const selected = luckyWheel.teams.includes(teamIndex);
+                  return (
+                    <label
+                      className={selected ? 'selected' : ''}
+                      aria-disabled={!eligible || luckyWheel.spinning}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        disabled={!eligible || luckyWheel.spinning}
+                        onChange={() => toggleLuckyWheelTeam(teamIndex)}
+                      />
+                      <TeamMark team={wheelTeam} />
+                      <span>
+                        <b>{wheelTeam.name}</b>
+                        <small>
+                          {eligible
+                            ? 'Eligible for spin'
+                            : rosterCount(s, teamIndex) >= s.rules.maxPlayers
+                              ? 'Squad full'
+                              : 'Insufficient balance'}
+                        </small>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+            {luckyWheel.teams.length > 0 && (
               <TeamWheel
                 key={
                   s.luckyWheelSpin?.playerIndex === luckyWheel.playerIndex
@@ -2754,8 +2828,8 @@ function AdminConsole() {
                     ? s.luckyWheelSpin
                     : {
                         playerIndex: luckyWheel.playerIndex,
-                        teams: eligibleLuckyTeams.map(({ index }) => index),
-                        winner: eligibleLuckyTeams[0].index,
+                        teams: luckyWheel.teams,
+                        winner: luckyWheel.teams[0],
                         startedAt: 0,
                         duration: 1,
                       }
@@ -2765,7 +2839,9 @@ function AdminConsole() {
             {eligibleLuckyTeams.length ? (
               <>
                 <p>
-                  Eligible teams: {eligibleLuckyTeams.map(({ team }) => team.name).join(' • ')}
+                  Participating teams: {luckyWheel.teams.length
+                    ? luckyWheel.teams.map((index) => s.teams[index]?.name).join(' • ')
+                    : 'Select at least one team'}
                 </p>
                 <strong className="lucky-wheel-result">
                   {luckyWheel.spinning
@@ -2776,7 +2852,7 @@ function AdminConsole() {
                 </strong>
                 <div className="lucky-wheel-actions">
                   <button
-                    disabled={luckyWheel.spinning}
+                    disabled={luckyWheel.spinning || !luckyWheel.teams.length}
                     onClick={spinLuckyWheel}
                   >
                     <FerrisWheel />

@@ -2774,7 +2774,15 @@ a {
   background: #f7f9fa;
 }
 .settings-database-primary {
-  order: -1;
+  order: -3;
+}
+.database-action-grid {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr 1fr;
+  gap: 10px;
+}
+.download-database-button.secondary {
+  background: #263f4a;
 }
 .player-database-settings header small {
   color: #566b75;
@@ -2845,6 +2853,9 @@ a {
   .player-database-settings {
     grid-template-columns: 1fr;
     align-items: stretch;
+  }
+  .database-action-grid {
+    grid-template-columns: 1fr;
   }
 }
 .celebration-settings > header {

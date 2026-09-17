@@ -3366,12 +3366,10 @@ function AdminConsole() {
             </div>
             <div className="player-database-settings settings-database-primary">
               <header>
-                <small>SETTINGS DATABASE</small>
-                <h2>Published spreadsheet link</h2>
+                <small>TOURNAMENT DATABASE</small>
                 <p>
-                  Download and immediately apply tournament settings from a
-                  sheet containing Setting and Value columns. Imported values
-                  remain editable in the controls below.
+                  Refresh the complete tournament database, or update only
+                  players or teams when needed.
                 </p>
               </header>
               <div className="database-download-control">
@@ -3399,21 +3397,49 @@ function AdminConsole() {
                     .
                   </small>
                 </label>
-                <button
-                  type="button"
-                  className="download-database-button"
-                  disabled={
-                    !s.settingsDatabaseUrl ||
-                    settingsDatabaseImport.running ||
-                    databaseImport.running ||
-                    teamDatabaseImport.running
-                  }
-                  onClick={downloadSettingsDatabase}
-                >
-                  {settingsDatabaseImport.running
-                    ? 'Refreshing tournament database...'
-                    : 'Download settings, teams, and players'}
-                </button>
+                <div className="database-action-grid">
+                  <button
+                    type="button"
+                    className="download-database-button"
+                    disabled={
+                      !s.settingsDatabaseUrl ||
+                      settingsDatabaseImport.running ||
+                      databaseImport.running ||
+                      teamDatabaseImport.running
+                    }
+                    onClick={downloadSettingsDatabase}
+                  >
+                    {settingsDatabaseImport.running
+                      ? 'Refreshing all...'
+                      : 'Download and apply all'}
+                  </button>
+                  <button
+                    type="button"
+                    className="download-database-button secondary"
+                    disabled={
+                      !s.playerDatabaseUrl ||
+                      databaseImport.running ||
+                      settingsDatabaseImport.running ||
+                      teamDatabaseImport.running
+                    }
+                    onClick={downloadPlayerDatabase}
+                  >
+                    {databaseImport.running ? 'Downloading players...' : 'Players only'}
+                  </button>
+                  <button
+                    type="button"
+                    className="download-database-button secondary"
+                    disabled={
+                      !s.teamDatabaseUrl ||
+                      teamDatabaseImport.running ||
+                      settingsDatabaseImport.running ||
+                      databaseImport.running
+                    }
+                    onClick={downloadTeamDatabase}
+                  >
+                    {teamDatabaseImport.running ? 'Downloading teams...' : 'Teams only'}
+                  </button>
+                </div>
                 {settingsDatabaseImport.message && (
                   <div
                     className={
@@ -3428,37 +3454,6 @@ function AdminConsole() {
                     <span>{settingsDatabaseImport.message}</span>
                   </div>
                 )}
-              </div>
-            </div>
-            <div className="player-database-settings">
-              <header>
-                <small>PLAYER DATABASE</small>
-                <h2>Published spreadsheet link</h2>
-                <p>
-                  Download and immediately apply names, ages, and photos from
-                  the published XLS or XLSX link.
-                </p>
-              </header>
-              <div className="database-download-control">
-                <p className="database-source-status">
-                  {s.playerDatabaseUrl
-                    ? 'Player database source loaded from the Settings spreadsheet.'
-                    : 'Add Player Database URL to the Settings spreadsheet first.'}
-                </p>
-                <button
-                  type="button"
-                  className="download-database-button"
-                  disabled={
-                    !s.playerDatabaseUrl ||
-                    databaseImport.running ||
-                    settingsDatabaseImport.running
-                  }
-                  onClick={downloadPlayerDatabase}
-                >
-                  {databaseImport.running
-                    ? 'Downloading and applying database...'
-                    : 'Download and apply player database'}
-                </button>
                 {(databaseImport.running || databaseImport.message) && (
                   <div
                     className={
@@ -3473,37 +3468,6 @@ function AdminConsole() {
                     <span>{databaseImport.message}</span>
                   </div>
                 )}
-              </div>
-            </div>
-            <div className="player-database-settings">
-              <header>
-                <small>TEAM DATABASE</small>
-                <h2>Published spreadsheet link</h2>
-                <p>
-                  Download team names and logos from a published XLS or XLSX
-                  sheet containing Team Name and Logo columns.
-                </p>
-              </header>
-              <div className="database-download-control">
-                <p className="database-source-status">
-                  {s.teamDatabaseUrl
-                    ? 'Team database source loaded from the Settings spreadsheet.'
-                    : 'Add Team Database URL to the Settings spreadsheet first.'}
-                </p>
-                <button
-                  type="button"
-                  className="download-database-button"
-                  disabled={
-                    !s.teamDatabaseUrl ||
-                    teamDatabaseImport.running ||
-                    settingsDatabaseImport.running
-                  }
-                  onClick={downloadTeamDatabase}
-                >
-                  {teamDatabaseImport.running
-                    ? 'Downloading team database...'
-                    : 'Download and apply team database'}
-                </button>
                 {teamDatabaseImport.message && (
                   <div
                     className={

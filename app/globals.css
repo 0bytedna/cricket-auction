@@ -5688,3 +5688,65 @@ a {
   padding-top: 4px;
   padding-bottom: 5px;
 }
+
+/* Prominent, equally sized branding on Projector and OBS Home Screens. */
+.rest-screen .home-logo-row {
+  width: min(1280px, 94vw);
+  gap: clamp(40px, 6vw, 96px);
+}
+.rest-screen .home-logo-row article {
+  grid-template-rows: 235px auto auto;
+}
+.rest-screen .home-logo-row .tournament-home-logo {
+  grid-template-rows: 235px;
+}
+.rest-screen .home-logo-row .brand-mark {
+  height: 235px;
+}
+.rest-screen .home-logo-row .brand-mark > img,
+.rest-screen .home-logo-row .brand-mark > b {
+  width: 210px;
+  height: 210px;
+}
+.rest-screen
+  .home-logo-row
+  .tournament-home-logo
+  .brand-mark
+  > img,
+.rest-screen
+  .home-logo-row
+  .tournament-home-logo
+  .brand-mark
+  > b {
+  width: 210px;
+  height: 210px;
+}
+@media (max-height: 820px) {
+  .rest-screen .home-logo-row article {
+    grid-template-rows: 185px auto auto;
+  }
+  .rest-screen .home-logo-row .tournament-home-logo {
+    grid-template-rows: 185px;
+  }
+  .rest-screen .home-logo-row .brand-mark {
+    height: 185px;
+  }
+  .rest-screen .home-logo-row .brand-mark > img,
+  .rest-screen .home-logo-row .brand-mark > b {
+    width: 165px;
+    height: 165px;
+  }
+  .rest-screen
+    .home-logo-row
+    .tournament-home-logo
+    .brand-mark
+    > img,
+  .rest-screen
+    .home-logo-row
+    .tournament-home-logo
+    .brand-mark
+    > b {
+    width: 165px;
+    height: 165px;
+  }
+}

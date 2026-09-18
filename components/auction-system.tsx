@@ -1023,7 +1023,7 @@ export function Overlay() {
   if (s.obsMode === 'resting') return <RestScreen s={s} overlay />;
   if (s.obsMode === 'rosters')
     return (
-      <main className="projector-view">
+      <main className="projector-view obs-rosters-view">
         <header>
           <Logo />
           <span className="live-pill">SQUAD UPDATE</span>

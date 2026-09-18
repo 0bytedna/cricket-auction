@@ -5029,6 +5029,14 @@ a {
   background: #eef2f4;
   color: #17313c;
 }
+.obs-rosters-view,
+.obs-rosters-view .roster-board {
+  background: transparent;
+}
+.obs-rosters-view > header {
+  border-bottom: 0;
+  background: transparent;
+}
 .projector-rosters-view .roster-title small {
   color: #a51f30;
   font-weight: 900;

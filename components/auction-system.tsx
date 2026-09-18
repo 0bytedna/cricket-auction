@@ -1357,6 +1357,9 @@ function AdminConsole() {
   const [playerSetFilter, setPlayerSetFilter] = useState<'all' | PlayerSet>(
       'all',
     ),
+    [auctionStatusFilter, setAuctionStatusFilter] = useState<
+      Player['result']
+    >('pending'),
     [playerStatusFilter, setPlayerStatusFilter] = useState<
       'all' | Player['result']
     >('all'),
@@ -1366,6 +1369,7 @@ function AdminConsole() {
       spinning: boolean;
       winner: number;
       teams: number[];
+      price: number;
     } | null>(null),
     [databaseImport, setDatabaseImport] = useState({
       running: false,
@@ -2148,6 +2152,9 @@ function AdminConsole() {
       ...s,
       player: i,
       activeSet: s.players[i].set,
+      obsMode: 'auction',
+      projectorMode: 'auction',
+      luckyWheelSpin: null,
       bid: s.rules.minPoints,
       leader: -1,
       status: 'live',
@@ -2156,8 +2163,12 @@ function AdminConsole() {
       playerNavigationHistory: history,
       playerNavigationPosition: historyPosition,
     });
+    setAuctionStatusFilter(s.players[i].result);
+    setLuckyWheel(null);
+    setTab('auction');
   };
   const bid = (i: number) => {
+    if (rosterCount(s, i) >= s.rules.maxPlayers) return;
     const nextBid = s.leader < 0 ? s.rules.minPoints : s.bid + BID_STEP;
     if (
       s.status !== 'live' ||
@@ -2231,48 +2242,36 @@ function AdminConsole() {
   };
   const playersInSet = s.players
     .map((player, i) => ({ player, i }))
-    .filter(({ player }) => player.set === s.activeSet)
+    .filter(
+      ({ player }) =>
+        player.set === s.activeSet && player.result === auctionStatusFilter,
+    )
     .map(({ i }) => i);
   const setPosition = playersInSet.indexOf(s.player);
-  const pendingInSet = playersInSet.filter(
-    (index) => s.players[index].result === 'pending',
-  );
   const shownInActiveSet = new Set(
     s.playerNavigationHistory.filter(
-      (index) => s.players[index]?.set === s.activeSet,
+      (index) =>
+        s.players[index]?.set === s.activeSet &&
+        s.players[index]?.result === auctionStatusFilter,
     ),
   );
-  const unseenPendingInSet = pendingInSet.filter(
+  const unseenPlayersInSet = playersInSet.filter(
     (index) => !shownInActiveSet.has(index),
   );
   const setSequenceExhausted =
-    pendingInSet.length > 0 && unseenPendingInSet.length === 0;
+    playersInSet.length > 0 && unseenPlayersInSet.length === 0;
   const resetSetSequence = () => {
-    if (!pendingInSet.length) return;
+    if (!playersInSet.length) return;
     const history = s.playerNavigationHistory.filter(
-      (index) => s.players[index]?.set !== s.activeSet,
+      (index) =>
+        s.players[index]?.set !== s.activeSet ||
+        s.players[index]?.result !== auctionStatusFilter,
     );
     const selected = s.randomPlayerSelection
-      ? pendingInSet[Math.floor(Math.random() * pendingInSet.length)]
-      : pendingInSet[0];
+      ? playersInSet[Math.floor(Math.random() * playersInSet.length)]
+      : playersInSet[0];
     const nextHistory = [...history, selected];
     navigateTo(selected, nextHistory, nextHistory.length - 1);
-  };
-  const pendingInDirection = (direction: 1 | -1) => {
-    if (!pendingInSet.length) return -1;
-    if (setPosition < 0)
-      return direction === 1
-        ? pendingInSet[0]
-        : pendingInSet[pendingInSet.length - 1];
-    for (let offset = 1; offset <= playersInSet.length; offset += 1) {
-      const position =
-        (setPosition + direction * offset + playersInSet.length) %
-        playersInSet.length;
-      const candidate = playersInSet[position];
-      if (candidate !== s.player && s.players[candidate].result === 'pending')
-        return candidate;
-    }
-    return -1;
   };
   const next = () => {
     if (setSequenceExhausted) {
@@ -2289,7 +2288,8 @@ function AdminConsole() {
     const nextHistoryPosition = history.findIndex(
       (index, historyPosition) =>
         historyPosition > position &&
-        s.players[index]?.set === s.activeSet,
+        s.players[index]?.set === s.activeSet &&
+        s.players[index]?.result === auctionStatusFilter,
     );
     if (nextHistoryPosition >= 0) {
       navigateTo(
@@ -2299,17 +2299,17 @@ function AdminConsole() {
       );
       return;
     }
-    if (!pendingInSet.length || !unseenPendingInSet.length) return;
+    if (!playersInSet.length || !unseenPlayersInSet.length) return;
     if (s.randomPlayerSelection) {
       const chosen =
-        unseenPendingInSet[
-          Math.floor(Math.random() * unseenPendingInSet.length)
+        unseenPlayersInSet[
+          Math.floor(Math.random() * unseenPlayersInSet.length)
         ];
       const nextHistory = [...history, chosen];
       navigateTo(chosen, nextHistory, nextHistory.length - 1);
       return;
     }
-    const unseenPlayers = new Set(unseenPendingInSet);
+    const unseenPlayers = new Set(unseenPlayersInSet);
     let candidate = -1;
     for (let offset = 1; offset <= playersInSet.length; offset += 1) {
       const positionInSet =
@@ -2332,7 +2332,10 @@ function AdminConsole() {
     const position = Math.min(s.playerNavigationPosition, history.length - 1);
     let previousHistoryPosition = -1;
     for (let index = position - 1; index >= 0; index -= 1) {
-      if (s.players[history[index]]?.set === s.activeSet) {
+      if (
+        s.players[history[index]]?.set === s.activeSet &&
+        s.players[history[index]]?.result === auctionStatusFilter
+      ) {
         previousHistoryPosition = index;
         break;
       }
@@ -2350,14 +2353,18 @@ function AdminConsole() {
       ? [...s.playerNavigationHistory]
       : [s.player];
     const alreadyShown = new Set(
-      history.filter((index) => s.players[index]?.set === set),
+      history.filter(
+        (index) =>
+          s.players[index]?.set === set &&
+          s.players[index]?.result === auctionStatusFilter,
+      ),
     );
     const available = s.players
       .map((player, index) => ({ player, index }))
       .filter(
         ({ player, index }) =>
           player.set === set &&
-          player.result === 'pending' &&
+          player.result === auctionStatusFilter &&
           !alreadyShown.has(index),
       )
       .map(({ index }) => index);
@@ -2370,12 +2377,18 @@ function AdminConsole() {
       return;
     }
     for (let position = history.length - 1; position >= 0; position -= 1) {
-      if (s.players[history[position]]?.set === set) {
+      if (
+        s.players[history[position]]?.set === set &&
+        s.players[history[position]]?.result === auctionStatusFilter
+      ) {
         navigateTo(history[position], history, position);
         return;
       }
     }
-    const fallback = s.players.findIndex((player) => player.set === set);
+    const fallback = s.players.findIndex(
+      (player) =>
+        player.set === set && player.result === auctionStatusFilter,
+    );
     if (fallback >= 0) {
       const nextHistory = [...history, fallback];
       navigateTo(fallback, nextHistory, nextHistory.length - 1);
@@ -2383,19 +2396,63 @@ function AdminConsole() {
     }
     setS({ ...s, activeSet: set });
   };
+  const switchAuctionStatus = (status: Player['result']) => {
+    setAuctionStatusFilter(status);
+    const candidates = s.players
+      .map((player, index) => ({ player, index }))
+      .filter(
+        ({ player }) =>
+          player.set === s.activeSet && player.result === status,
+      )
+      .map(({ index }) => index);
+    if (!candidates.length) return;
+    const selected = s.randomPlayerSelection
+      ? candidates[Math.floor(Math.random() * candidates.length)]
+      : candidates[0];
+    const history = [...s.playerNavigationHistory, selected];
+    navigateTo(selected, history, history.length - 1);
+  };
   const eligibleLuckyTeams = s.teams
     .map((team, index) => ({ team, index }))
     .filter(({ index }) => maxAllowedBid(s, index) >= s.rules.minPoints);
-  const openLuckyWheel = (playerIndex: number) => {
-    const participantIndexes = eligibleLuckyTeams.map(({ index }) => index);
+  const maxBidWheelTeams = eligibleLuckyTeams
+    .filter(({ index }) => maxAllowedBid(s, index) >= s.rules.maxPoints)
+    .map(({ index }) => index);
+  const wheelEligibleTeamIndexes = s.teams
+    .map((_, index) => index)
+    .filter(
+      (index) =>
+        maxAllowedBid(s, index) >=
+        (luckyWheel?.price || s.rules.minPoints),
+    );
+  const openLuckyWheel = (
+    playerIndex: number,
+    requestedParticipants?: number[],
+    assignmentPrice = s.rules.minPoints,
+  ) => {
+    const participantIndexes =
+      requestedParticipants || eligibleLuckyTeams.map(({ index }) => index);
     setLuckyWheel({
       playerIndex,
       spinning: false,
       winner: -1,
       teams: participantIndexes,
+      price: assignmentPrice,
     });
     setS({
       ...s,
+      player: playerIndex,
+      activeSet: s.players[playerIndex].set,
+      bid: s.rules.minPoints,
+      leader: -1,
+      status:
+        s.players[playerIndex].result === 'pending'
+          ? 'live'
+          : s.players[playerIndex].result,
+      bidHistory: [],
+      celebrationAt: 0,
+      obsMode: 'auction',
+      projectorMode: 'auction',
       luckyWheelSpin: participantIndexes.length
         ? {
             playerIndex,
@@ -2406,15 +2463,16 @@ function AdminConsole() {
           }
         : null,
     });
+    setAuctionStatusFilter(s.players[playerIndex].result);
+    setTab('auction');
   };
   const toggleLuckyWheelTeam = (teamIndex: number) => {
     if (!luckyWheel || luckyWheel.spinning) return;
-    const eligible = eligibleLuckyTeams.some(({ index }) => index === teamIndex);
+    const eligible = wheelEligibleTeamIndexes.includes(teamIndex);
     if (!eligible) return;
     const teams = luckyWheel.teams.includes(teamIndex)
       ? luckyWheel.teams.filter((index) => index !== teamIndex)
-      : eligibleLuckyTeams
-          .map(({ index }) => index)
+      : wheelEligibleTeamIndexes
           .filter(
             (index) => index === teamIndex || luckyWheel.teams.includes(index),
           );
@@ -2432,9 +2490,7 @@ function AdminConsole() {
   };
   const spinLuckyWheel = () => {
     if (!luckyWheel || luckyWheel.spinning) return;
-    const eligibleIndexes = new Set(
-      eligibleLuckyTeams.map(({ index }) => index),
-    );
+    const eligibleIndexes = new Set(wheelEligibleTeamIndexes);
     const participants = luckyWheel.teams.filter((index) =>
       eligibleIndexes.has(index),
     );
@@ -2481,7 +2537,7 @@ function AdminConsole() {
       ...s,
       player: playerIndex,
       activeSet: s.players[playerIndex].set,
-      bid: s.rules.minPoints,
+      bid: luckyWheel.price,
       leader: winner,
       status: 'sold',
       bidHistory: [],
@@ -2495,7 +2551,7 @@ function AdminConsole() {
               ...player,
               result: 'sold',
               soldTo: winner,
-              soldPrice: s.rules.minPoints,
+              soldPrice: luckyWheel.price,
             }
           : player,
       ),
@@ -2746,7 +2802,8 @@ function AdminConsole() {
                 <small>SKILL SET {s.activeSet} - PLAYER AUCTION</small>
               </span>
               <em>
-                PLAYER {Math.max(1, setPosition + 1)} OF {playersInSet.length}
+                PLAYER {playersInSet.length ? Math.max(1, setPosition + 1) : 0}{' '}
+                OF {playersInSet.length}
               </em>
             </div>
             <div className="set-switcher">
@@ -2758,6 +2815,13 @@ function AdminConsole() {
                 <button
                   className={s.activeSet === set ? 'active' : ''}
                   onClick={() => switchSet(set)}
+                  disabled={
+                    !s.players.some(
+                      (player) =>
+                        player.set === set &&
+                        player.result === auctionStatusFilter,
+                    )
+                  }
                 >
                   SET {set}
                   <small>
@@ -2766,6 +2830,38 @@ function AdminConsole() {
                   </small>
                 </button>
               ))}
+            </div>
+            <div className="auction-status-switcher">
+              <span>
+                <small>PLAYER STATUS</small>
+                <b>Filter players inside Set {s.activeSet}</b>
+              </span>
+              {(
+                [
+                  ['pending', 'Pending'],
+                  ['unsold', 'Unsold'],
+                  ['sold', 'Sold'],
+                ] as const
+              ).map(([status, label]) => {
+                const count = s.players.filter(
+                  (player) =>
+                    player.set === s.activeSet && player.result === status,
+                ).length;
+                return (
+                  <button
+                    className={auctionStatusFilter === status ? 'active' : ''}
+                    onClick={() => switchAuctionStatus(status)}
+                    disabled={!count}
+                  >
+                    {label}
+                    <small>{count} PLAYERS</small>
+                  </button>
+                );
+              })}
+              <strong>
+                {playersInSet.length} {auctionStatusFilter.toUpperCase()} IN SET{' '}
+                {s.activeSet}
+              </strong>
             </div>
             <div className="admin-player">
               <PlayerImage src={p.image} alt={p.name} />
@@ -2805,7 +2901,11 @@ function AdminConsole() {
                   <button
                     onClick={() => bid(i)}
                     disabled={disabled}
-                    className={s.leader === i ? 'leading' : ''}
+                    className={
+                      s.leader === i && count < s.rules.maxPlayers
+                        ? 'leading'
+                        : ''
+                    }
                   >
                     <TeamMark team={t} />
                     <span>
@@ -2849,6 +2949,26 @@ function AdminConsole() {
                   UNSOLD
                 </span>
               </button>
+              {s.status === 'live' &&
+                s.bid >= s.rules.maxPoints &&
+                maxBidWheelTeams.length >= 2 && (
+                <button
+                  className="auction-wheel"
+                  onClick={() =>
+                    openLuckyWheel(
+                      s.player,
+                      maxBidWheelTeams,
+                      s.rules.maxPoints,
+                    )
+                  }
+                >
+                  <FerrisWheel />
+                  <span>
+                    <small>{maxBidWheelTeams.length} TEAMS AT MAX BID</small>
+                    WAGON WHEEL
+                  </span>
+                </button>
+              )}
               <button
                 className="undo"
                 onClick={undoBid}
@@ -2870,7 +2990,7 @@ function AdminConsole() {
               <button
                 className="move-player next"
                 onClick={next}
-                disabled={!pendingInSet.length}
+                disabled={!playersInSet.length}
               >
                 <span>
                   <small>RIGHT ARROW KEY</small>
@@ -3172,9 +3292,7 @@ function AdminConsole() {
               <small>CHOOSE PARTICIPATING TEAMS</small>
               <div>
                 {s.teams.map((wheelTeam, teamIndex) => {
-                  const eligible = eligibleLuckyTeams.some(
-                    ({ index }) => index === teamIndex,
-                  );
+                  const eligible = wheelEligibleTeamIndexes.includes(teamIndex);
                   const selected = luckyWheel.teams.includes(teamIndex);
                   return (
                     <label
@@ -3225,7 +3343,7 @@ function AdminConsole() {
                 }
               />
             )}
-            {eligibleLuckyTeams.length ? (
+            {wheelEligibleTeamIndexes.length ? (
               <>
                 <p>
                   Participating teams: {luckyWheel.teams.length

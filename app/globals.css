@@ -2291,7 +2291,7 @@ a {
 }
 .auction-actions {
   display: grid;
-  grid-template-columns: 1fr 1.15fr 1.15fr 1fr 0.9fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
   gap: 9px;
   margin-top: 18px;
 }
@@ -2343,6 +2343,10 @@ a {
 .auction-actions .undo {
   background: #fff5d7;
   color: #765100;
+}
+.auction-actions .auction-wheel {
+  background: #263b4a;
+  color: white;
 }
 .auction-actions button:disabled {
   opacity: 0.35;
@@ -2448,6 +2452,70 @@ a {
 .set-switcher button.active small {
   color: #d7fffa;
 }
+.set-switcher button:disabled,
+.auction-status-switcher button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+.auction-status-switcher {
+  margin: -4px 0 14px;
+  padding: 10px 14px;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) repeat(3, minmax(110px, 140px)) auto;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid #d6e0e4;
+  border-radius: 11px;
+  background: #f7f9fa;
+}
+.auction-status-switcher > span {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.auction-status-switcher > span small {
+  color: #74838c;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+.auction-status-switcher > span b {
+  color: #263e49;
+  font-size: 12px;
+}
+.auction-status-switcher button {
+  min-height: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: 1px solid #ccd8dd;
+  border-radius: 8px;
+  background: white;
+  color: #324b55;
+  font-size: 12px;
+  font-weight: 1000;
+  cursor: pointer;
+}
+.auction-status-switcher button small {
+  color: #7b8b93;
+  font-size: 8px;
+}
+.auction-status-switcher button.active {
+  border-color: #263b4a;
+  background: #263b4a;
+  color: white;
+}
+.auction-status-switcher button.active small {
+  color: #f2dda0;
+}
+.auction-status-switcher > strong {
+  color: #60727a;
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
 .admin-main .admin-player > img {
   object-fit: contain;
   object-position: center;
@@ -2535,6 +2603,13 @@ a {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
   .set-switcher > span {
+    grid-column: 1 / -1;
+  }
+  .auction-status-switcher {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .auction-status-switcher > span,
+  .auction-status-switcher > strong {
     grid-column: 1 / -1;
   }
 }
@@ -4495,6 +4570,7 @@ a {
 }
 .admin-main .team-buttons button:disabled {
   opacity: 0.78;
+  pointer-events: none;
 }
 .projector-view > .projector-brand-strip {
   height: 132px;

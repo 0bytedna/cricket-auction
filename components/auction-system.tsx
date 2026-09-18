@@ -110,6 +110,7 @@ type AState = {
   randomPlayerSelection: boolean;
   tickerSpeed: number;
   wheelSpinDuration: number;
+  teamCarouselDuration: number;
   playerDatabaseUrl: string;
   teamDatabaseUrl: string;
   settingsDatabaseUrl: string;
@@ -190,6 +191,7 @@ const initial: AState = {
   randomPlayerSelection: true,
   tickerSpeed: 5,
   wheelSpinDuration: 5,
+  teamCarouselDuration: 3,
   playerDatabaseUrl:
     'https://docs.google.com/spreadsheets/d/e/2PACX-1vTJSkmTO0aDVXFo1oY7TlqOo7GkfAlrrlxl7mBgMhDKAe5rSPnQVHDDD5gxQ6ptpv7S1L5JMT_-kZyR/pub?output=xlsx',
   teamDatabaseUrl: '',
@@ -229,6 +231,7 @@ const settingsSnapshot = (state: AState) => ({
   activeSet: state.activeSet,
   tickerSpeed: state.tickerSpeed,
   wheelSpinDuration: state.wheelSpinDuration,
+  teamCarouselDuration: state.teamCarouselDuration,
   obsMode: state.obsMode,
   projectorMode: state.projectorMode,
   celebrationMuted: state.celebrationMuted,
@@ -369,6 +372,10 @@ const normalize = (raw: any): AState => {
     wheelSpinDuration: Math.min(
       60,
       Math.max(1, Number(raw.wheelSpinDuration) || 5),
+    ),
+    teamCarouselDuration: Math.min(
+      60,
+      Math.max(1, Number(raw.teamCarouselDuration) || 3),
     ),
     obsMode:
       raw.obsMode ||
@@ -1049,10 +1056,10 @@ function RosterBoard({ s }: { s: AState }) {
     if (s.teams.length <= 1) return;
     const timer = window.setInterval(
       () => setActiveTeam((current) => (current + 1) % s.teams.length),
-      3000,
+      s.teamCarouselDuration * 1000,
     );
     return () => window.clearInterval(timer);
-  }, [s.teams.length]);
+  }, [s.teams.length, s.teamCarouselDuration]);
   useEffect(() => {
     if (activeTeam >= s.teams.length) setActiveTeam(0);
   }, [activeTeam, s.teams.length]);
@@ -1105,7 +1112,15 @@ function RosterBoard({ s }: { s: AState }) {
       </div>
       <div className="roster-carousel-dots" aria-hidden="true">
         {s.teams.map((item, index) => (
-          <i key={item.code + index} className={index === teamIndex ? 'active' : ''} />
+          <i
+            key={item.code + index}
+            className={index === teamIndex ? 'active' : ''}
+            style={
+              index === teamIndex
+                ? ({ '--carousel-duration': `${s.teamCarouselDuration}s` } as CSSProperties)
+                : undefined
+            }
+          />
         ))}
       </div>
     </section>
@@ -1771,6 +1786,10 @@ function AdminConsole() {
           typeof imported.wheelSpinDuration === 'number'
             ? imported.wheelSpinDuration
             : s.wheelSpinDuration,
+        teamCarouselDuration:
+          typeof imported.teamCarouselDuration === 'number'
+            ? imported.teamCarouselDuration
+            : s.teamCarouselDuration,
         celebrationMuted:
           typeof imported.celebrationMuted === 'boolean'
             ? imported.celebrationMuted
@@ -3561,6 +3580,26 @@ function AdminConsole() {
                   }
                 />
                 <small>Duration in seconds, from 1 to 60.</small>
+              </label>
+              <label>
+                <span>Teams screen card duration</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={60}
+                  step={1}
+                  value={s.teamCarouselDuration}
+                  onChange={(event) =>
+                    setS({
+                      ...s,
+                      teamCarouselDuration: Math.min(
+                        60,
+                        Math.max(1, Number(event.target.value) || 1),
+                      ),
+                    })
+                  }
+                />
+                <small>Seconds each team stays visible on Projector and OBS.</small>
               </label>
               <em>
                 Minimum wallet required for a full squad:{' '}

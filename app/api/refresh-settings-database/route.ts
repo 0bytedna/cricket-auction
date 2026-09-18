@@ -104,6 +104,9 @@ export async function POST(request: Request) {
       randomPlayerSelection: booleanValue(get('Random Player Selection')),
       tickerSpeed: numberValue(get('Ticker Ribbon Speed', 'Ticker Speed')),
       wheelSpinDuration: numberValue(get('Wheel Spin Duration')),
+      teamCarouselDuration: numberValue(
+        get('Teams Screen Card Duration', 'Team Carousel Duration'),
+      ),
       celebrationMuted: booleanValue(get('Celebration Muted')),
       celebration: {
         density: numberValue(get('Confetti Density')),

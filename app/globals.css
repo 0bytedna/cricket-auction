@@ -5962,7 +5962,7 @@ a {
 .roster-carousel-dots i.active {
   width: 54px;
   background: #d62839;
-  animation: rosterDotProgress 3s linear both;
+  animation: rosterDotProgress var(--carousel-duration, 3s) linear both;
 }
 @keyframes rosterCardSlide {
   from {

@@ -5695,18 +5695,18 @@ a {
   gap: clamp(40px, 6vw, 96px);
 }
 .rest-screen .home-logo-row article {
-  grid-template-rows: 235px auto auto;
+  grid-template-rows: 305px auto auto;
 }
 .rest-screen .home-logo-row .tournament-home-logo {
-  grid-template-rows: 235px;
+  grid-template-rows: 305px;
 }
 .rest-screen .home-logo-row .brand-mark {
-  height: 235px;
+  height: 305px;
 }
 .rest-screen .home-logo-row .brand-mark > img,
 .rest-screen .home-logo-row .brand-mark > b {
-  width: 230px;
-  height: 230px;
+  width: 285px;
+  height: 285px;
 }
 .rest-screen
   .home-logo-row
@@ -5718,15 +5718,17 @@ a {
   .tournament-home-logo
   .brand-mark
   > b {
-  width: 230px;
-  height: 230px;
+  width: 285px;
+  height: 285px;
 }
 .rest-screen .home-logo-row article > b {
-  font-size: 20px;
+  padding: 10px 18px;
+  font-size: 28px;
   line-height: 1.15;
 }
 .rest-screen .home-logo-row article > small {
-  font-size: 12px;
+  padding: 7px 15px;
+  font-size: 16px;
   font-weight: 900;
 }
 .rest-screen:not(.obs-rest) .home-logo-row article,
@@ -5761,18 +5763,18 @@ a {
 }
 @media (max-height: 820px) {
   .rest-screen .home-logo-row article {
-    grid-template-rows: 185px auto auto;
+    grid-template-rows: 225px auto auto;
   }
   .rest-screen .home-logo-row .tournament-home-logo {
-    grid-template-rows: 185px;
+    grid-template-rows: 225px;
   }
   .rest-screen .home-logo-row .brand-mark {
-    height: 185px;
+    height: 225px;
   }
   .rest-screen .home-logo-row .brand-mark > img,
   .rest-screen .home-logo-row .brand-mark > b {
-    width: 165px;
-    height: 165px;
+    width: 210px;
+    height: 210px;
   }
   .rest-screen
     .home-logo-row
@@ -5784,8 +5786,14 @@ a {
     .tournament-home-logo
     .brand-mark
     > b {
-    width: 165px;
-    height: 165px;
+    width: 210px;
+    height: 210px;
+  }
+  .rest-screen .home-logo-row article > b {
+    font-size: 22px;
+  }
+  .rest-screen .home-logo-row article > small {
+    font-size: 13px;
   }
   .rest-screen:not(.obs-rest) .home-logo-row article,
   .rest-screen:not(.obs-rest) .home-logo-row .tournament-home-logo {

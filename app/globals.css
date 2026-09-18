@@ -2517,15 +2517,6 @@ a {
 .auction-status-switcher button.active small {
   color: #f2dda0;
 }
-.auction-status-switcher > strong {
-  position: absolute;
-  right: 14px;
-  bottom: 2px;
-  color: #60727a;
-  font-size: 8px;
-  letter-spacing: 0.05em;
-  text-align: right;
-}
 .admin-main .admin-player > img {
   object-fit: contain;
   object-position: center;

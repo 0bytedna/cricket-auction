@@ -2865,10 +2865,6 @@ function AdminConsole() {
                   </button>
                 );
               })}
-              <strong>
-                {playersInSet.length} {auctionStatusFilter.toUpperCase()} IN SET{' '}
-                {s.activeSet}
-              </strong>
             </div>
             </div>
             <div className="admin-player">

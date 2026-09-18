@@ -2806,6 +2806,7 @@ function AdminConsole() {
                 OF {playersInSet.length}
               </em>
             </div>
+            <div className="auction-filter-row">
             <div className="set-switcher">
               <span>
                 <small>ACTIVE PLAYER SET</small>
@@ -2862,6 +2863,7 @@ function AdminConsole() {
                 {playersInSet.length} {auctionStatusFilter.toUpperCase()} IN SET{' '}
                 {s.activeSet}
               </strong>
+            </div>
             </div>
             <div className="admin-player">
               <PlayerImage src={p.image} alt={p.name} />

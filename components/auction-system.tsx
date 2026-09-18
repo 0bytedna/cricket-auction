@@ -1276,7 +1276,7 @@ export function Projector() {
     );
   if (s.projectorMode === 'rosters')
     return (
-      <main className="projector-view">
+      <main className="projector-view projector-rosters-view">
         <header>
           <Logo />
           <span className="live-pill">SQUAD UPDATE</span>
@@ -2412,6 +2412,20 @@ function AdminConsole() {
     const history = [...s.playerNavigationHistory, selected];
     navigateTo(selected, history, history.length - 1);
   };
+  useEffect(() => {
+    const inActiveSet = s.players.filter(
+      (player) => player.set === s.activeSet,
+    );
+    if (
+      inActiveSet.some((player) => player.result === auctionStatusFilter)
+    )
+      return;
+    const fallback = (['pending', 'unsold', 'sold'] as const).find((status) =>
+      inActiveSet.some((player) => player.result === status),
+    );
+    if (fallback && fallback !== auctionStatusFilter)
+      switchAuctionStatus(fallback);
+  }, [s.activeSet, s.players, auctionStatusFilter]);
   const eligibleLuckyTeams = s.teams
     .map((team, index) => ({ team, index }))
     .filter(({ index }) => maxAllowedBid(s, index) >= s.rules.minPoints);
@@ -2808,10 +2822,6 @@ function AdminConsole() {
             </div>
             <div className="auction-filter-row">
             <div className="set-switcher">
-              <span>
-                <small>ACTIVE PLAYER SET</small>
-                <b>Choose the skill group being auctioned</b>
-              </span>
               {PLAYER_SETS.map((set) => (
                 <button
                   className={s.activeSet === set ? 'active' : ''}
@@ -2833,10 +2843,6 @@ function AdminConsole() {
               ))}
             </div>
             <div className="auction-status-switcher">
-              <span>
-                <small>PLAYER STATUS</small>
-                <b>Filter players inside Set {s.activeSet}</b>
-              </span>
               {(
                 [
                   ['pending', 'Pending'],

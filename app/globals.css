@@ -2408,7 +2408,7 @@ a {
   margin-bottom: 0;
   padding: 12px 14px;
   display: grid;
-  grid-template-columns: minmax(150px, 0.9fr) repeat(4, minmax(72px, 1fr));
+  grid-template-columns: repeat(4, minmax(72px, 1fr));
   align-items: center;
   gap: 9px;
   border: 1px solid #d6e0e4;
@@ -2464,10 +2464,11 @@ a {
   opacity: 0.42;
 }
 .auction-status-switcher {
+  position: relative;
   margin: 0;
-  padding: 10px 14px;
+  padding: 12px 14px;
   display: grid;
-  grid-template-columns: minmax(135px, 0.9fr) repeat(3, minmax(72px, 1fr));
+  grid-template-columns: repeat(3, minmax(72px, 1fr));
   align-items: center;
   gap: 9px;
   border: 1px solid #d6e0e4;
@@ -2490,7 +2491,7 @@ a {
   font-size: 12px;
 }
 .auction-status-switcher button {
-  min-height: 44px;
+  min-height: 48px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2517,9 +2518,11 @@ a {
   color: #f2dda0;
 }
 .auction-status-switcher > strong {
-  grid-column: 1 / -1;
+  position: absolute;
+  right: 14px;
+  bottom: 2px;
   color: #60727a;
-  font-size: 9px;
+  font-size: 8px;
   letter-spacing: 0.05em;
   text-align: right;
 }
@@ -2617,10 +2620,6 @@ a {
   }
   .auction-status-switcher {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  .auction-status-switcher > span,
-  .auction-status-switcher > strong {
-    grid-column: 1 / -1;
   }
 }
 
@@ -5024,6 +5023,58 @@ a {
 .projector-view .roster-title small,
 .projector-view .stats-heading small {
   color: #e1c66e;
+}
+.projector-rosters-view {
+  background: #eef2f4;
+  color: #17313c;
+}
+.projector-rosters-view > header {
+  border-bottom: 1px solid #d6e0e4;
+  background: white;
+  color: #17313c;
+  box-shadow: 0 5px 18px #102a3810;
+}
+.projector-rosters-view .roster-board {
+  background: #eef2f4;
+  color: #17313c;
+}
+.projector-rosters-view .roster-title small {
+  color: #a51f30;
+  font-weight: 900;
+}
+.projector-rosters-view .roster-title > b {
+  color: #61737c;
+}
+.projector-rosters-view .roster-grid article {
+  border: 1px solid #dce4ea;
+  border-top: 5px solid #d62839;
+  border-radius: 9px;
+  background: white;
+  box-shadow: 0 10px 28px #102a3812;
+  overflow: hidden;
+}
+.projector-rosters-view .roster-grid article > header {
+  border-bottom: 1px solid #e2e8eb;
+  background: #f8fafb;
+}
+.projector-rosters-view .roster-grid header b {
+  color: #17313c;
+}
+.projector-rosters-view .roster-grid header small {
+  color: #718189;
+}
+.projector-rosters-view .roster-grid header > strong {
+  color: #17313c;
+}
+.projector-rosters-view .roster-grid p {
+  border-bottom: 1px solid #edf1f3;
+  color: #263e49;
+}
+.projector-rosters-view .roster-grid p small {
+  color: #82919a;
+}
+.projector-rosters-view .roster-grid article > div > em {
+  color: #8b989f;
 }
 .rest-screen:not(.obs-rest) {
   background: radial-gradient(

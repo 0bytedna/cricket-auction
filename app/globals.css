@@ -5705,8 +5705,8 @@ a {
 }
 .rest-screen .home-logo-row .brand-mark > img,
 .rest-screen .home-logo-row .brand-mark > b {
-  width: 210px;
-  height: 210px;
+  width: 230px;
+  height: 230px;
 }
 .rest-screen
   .home-logo-row
@@ -5718,8 +5718,46 @@ a {
   .tournament-home-logo
   .brand-mark
   > b {
-  width: 210px;
-  height: 210px;
+  width: 230px;
+  height: 230px;
+}
+.rest-screen .home-logo-row article > b {
+  font-size: 20px;
+  line-height: 1.15;
+}
+.rest-screen .home-logo-row article > small {
+  font-size: 12px;
+  font-weight: 900;
+}
+.rest-screen:not(.obs-rest) .home-logo-row article,
+.rest-screen:not(.obs-rest) .home-logo-row .tournament-home-logo {
+  grid-template-rows: 305px auto auto;
+}
+.rest-screen:not(.obs-rest) .home-logo-row .brand-mark {
+  height: 305px;
+}
+.rest-screen:not(.obs-rest) .home-logo-row .brand-mark > img,
+.rest-screen:not(.obs-rest) .home-logo-row .brand-mark > b,
+.rest-screen:not(.obs-rest)
+  .home-logo-row
+  .tournament-home-logo
+  .brand-mark
+  > img,
+.rest-screen:not(.obs-rest)
+  .home-logo-row
+  .tournament-home-logo
+  .brand-mark
+  > b {
+  width: 285px;
+  height: 285px;
+}
+.rest-screen:not(.obs-rest) .home-logo-row article > b {
+  padding: 10px 18px;
+  font-size: 28px;
+}
+.rest-screen:not(.obs-rest) .home-logo-row article > small {
+  padding: 7px 15px;
+  font-size: 16px;
 }
 @media (max-height: 820px) {
   .rest-screen .home-logo-row article {
@@ -5748,5 +5786,33 @@ a {
     > b {
     width: 165px;
     height: 165px;
+  }
+  .rest-screen:not(.obs-rest) .home-logo-row article,
+  .rest-screen:not(.obs-rest) .home-logo-row .tournament-home-logo {
+    grid-template-rows: 225px auto auto;
+  }
+  .rest-screen:not(.obs-rest) .home-logo-row .brand-mark {
+    height: 225px;
+  }
+  .rest-screen:not(.obs-rest) .home-logo-row .brand-mark > img,
+  .rest-screen:not(.obs-rest) .home-logo-row .brand-mark > b,
+  .rest-screen:not(.obs-rest)
+    .home-logo-row
+    .tournament-home-logo
+    .brand-mark
+    > img,
+  .rest-screen:not(.obs-rest)
+    .home-logo-row
+    .tournament-home-logo
+    .brand-mark
+    > b {
+    width: 210px;
+    height: 210px;
+  }
+  .rest-screen:not(.obs-rest) .home-logo-row article > b {
+    font-size: 22px;
+  }
+  .rest-screen:not(.obs-rest) .home-logo-row article > small {
+    font-size: 13px;
   }
 }

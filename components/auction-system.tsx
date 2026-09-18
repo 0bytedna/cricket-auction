@@ -1044,53 +1044,69 @@ export function Overlay() {
   );
 }
 function RosterBoard({ s }: { s: AState }) {
+  const [activeTeam, setActiveTeam] = useState(0);
+  useEffect(() => {
+    if (s.teams.length <= 1) return;
+    const timer = window.setInterval(
+      () => setActiveTeam((current) => (current + 1) % s.teams.length),
+      3000,
+    );
+    return () => window.clearInterval(timer);
+  }, [s.teams.length]);
+  useEffect(() => {
+    if (activeTeam >= s.teams.length) setActiveTeam(0);
+  }, [activeTeam, s.teams.length]);
+  const teamIndex = Math.min(activeTeam, Math.max(0, s.teams.length - 1));
+  const team = s.teams[teamIndex];
+  const roster = s.players.filter(
+    (player) => player.result === 'sold' && player.soldTo === teamIndex,
+  );
+  if (!team) return null;
   return (
-    <section className="roster-board">
+    <section className="roster-board roster-carousel-board">
       <div className="roster-title">
         <span>
           <small>LIVE SQUAD STATUS</small>
           <h1>TEAMS SCREEN</h1>
         </span>
         <b>
-          {s.players.filter((p) => p.result === 'sold').length} PLAYERS SOLD
+          TEAM {teamIndex + 1} OF {s.teams.length}
         </b>
       </div>
-      <div className="roster-grid">
-        {s.teams.map((t, ti) => {
-          const roster = s.players.filter(
-            (p) => p.result === 'sold' && p.soldTo === ti,
-          );
-          return (
-            <article>
-              <header>
-                <TeamMark team={t} />
-                <span>
-                  <b>{t.name}</b>
-                  <small>{roster.length} PLAYERS</small>
-                </span>
-                <strong>
-                  {pts(left(s, ti))}
-                  <small>POINTS LEFT</small>
-                </strong>
-              </header>
-              <div>
-                {roster.length ? (
-                  roster.map((p) => (
-                    <p>
-                      <span>
-                        {p.name}
-                        <small>{p.age ? `AGE ${p.age}` : p.role}</small>
-                      </span>
-                      <b>{pts(p.soldPrice)}</b>
-                    </p>
-                  ))
-                ) : (
-                  <em>No players purchased yet</em>
-                )}
-              </div>
-            </article>
-          );
-        })}
+      <div className="roster-carousel-window">
+        <article key={`${team.code}-${teamIndex}`}>
+          <header>
+            <TeamMark team={team} />
+            <span>
+              <b>{team.name}</b>
+              <small>{roster.length} PLAYERS</small>
+            </span>
+            <strong>
+              {pts(left(s, teamIndex))}
+              <small>POINTS LEFT</small>
+            </strong>
+          </header>
+          <div>
+            {roster.length ? (
+              roster.map((player) => (
+                <p key={playerIdentity(player.name, player.age || 0)}>
+                  <span>
+                    {player.name}
+                    <small>{player.age ? `AGE ${player.age}` : player.role}</small>
+                  </span>
+                  <b>{pts(player.soldPrice)}</b>
+                </p>
+              ))
+            ) : (
+              <em>No players purchased yet</em>
+            )}
+          </div>
+        </article>
+      </div>
+      <div className="roster-carousel-dots" aria-hidden="true">
+        {s.teams.map((item, index) => (
+          <i key={item.code + index} className={index === teamIndex ? 'active' : ''} />
+        ))}
       </div>
     </section>
   );

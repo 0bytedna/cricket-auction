@@ -3954,6 +3954,17 @@ export function Admin() {
     [value, setValue] = useState(''),
     [error, setError] = useState(''),
     [isSetup, setIsSetup] = useState(false);
+  const resetOutputsToHome = async () => {
+    try {
+      await fetch('/api/auction-pause', {
+        method: 'POST',
+        cache: 'no-store',
+        keepalive: true,
+      });
+    } catch {
+      // Admin state hydration also restores both outputs to the Home Screen.
+    }
+  };
   useEffect(() => {
     void (async () => {
       try {
@@ -3968,7 +3979,7 @@ export function Admin() {
       }
       setReady(true);
     })();
-    void fetch('/api/auction-pause', { method: 'POST', keepalive: true });
+    void resetOutputsToHome();
   }, []);
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -3984,7 +3995,7 @@ export function Admin() {
       });
       if (response.ok) {
         localStorage.setItem('boundaryx-admin-password', value);
-        void fetch('/api/auction-pause', { method: 'POST', keepalive: true });
+        await resetOutputsToHome();
         setUnlocked(true);
         return;
       }
@@ -3998,7 +4009,7 @@ export function Admin() {
     const saved = localStorage.getItem('boundaryx-admin-password');
     if (!saved || saved === value) {
       localStorage.setItem('boundaryx-admin-password', value);
-      void fetch('/api/auction-pause', { method: 'POST', keepalive: true });
+      await resetOutputsToHome();
       setUnlocked(true);
     } else setError('Incorrect password');
   };

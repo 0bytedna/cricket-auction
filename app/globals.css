@@ -5285,18 +5285,25 @@ a {
 
 /* Seamless white Projector surface and collision-safe vertical alignment */
 .projector-view > .projector-brand-strip {
+  height: clamp(156px, 18vh, 184px);
+  padding: 10px 8vw;
   border: 0;
   background: white;
   box-shadow: 0 1px 0 #dfe5e8;
 }
 .projector-brand-strip .brand-mark > img,
 .projector-brand-strip .brand-mark > b {
+  width: clamp(128px, 15vh, 154px);
+  height: clamp(128px, 15vh, 154px);
   border-color: #d9dee1;
   background: white;
 }
 .projector-view .projector-auction-stage {
+  height: calc(100vh - clamp(156px, 18vh, 184px) - 64px);
+  min-height: 0;
   padding-top: clamp(14px, 2vh, 24px);
   padding-bottom: 22px;
+  justify-content: flex-end;
   background: #f3f5f6;
 }
 .projector-auction-card {

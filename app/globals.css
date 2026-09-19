@@ -4199,6 +4199,77 @@ a {
   background: #071820b8;
   backdrop-filter: blur(8px);
 }
+.auction-complete-backdrop {
+  position: fixed;
+  z-index: 1100;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #071820b8;
+  backdrop-filter: blur(8px);
+}
+.auction-complete-dialog {
+  width: min(500px, 100%);
+  padding: 38px;
+  border-radius: 18px;
+  background: white;
+  box-shadow: 0 24px 80px #0007;
+  color: #17313c;
+  text-align: center;
+}
+.auction-complete-dialog > svg {
+  width: 54px;
+  height: 54px;
+  margin-bottom: 12px;
+  color: #b58b20;
+}
+.auction-complete-dialog > small {
+  display: block;
+  color: #9b7418;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.16em;
+}
+.auction-complete-dialog h2 {
+  margin: 9px 0 12px;
+  font-size: 30px;
+}
+.auction-complete-dialog p {
+  margin: 0 auto 26px;
+  color: #61737c;
+  font-size: 15px;
+  line-height: 1.55;
+}
+.auction-complete-dialog > div {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.auction-complete-dialog button {
+  min-height: 48px;
+  border-radius: 8px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.auction-complete-dialog .download-results-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border: 0;
+  background: #d62839;
+  color: white;
+}
+.auction-complete-dialog .download-results-button svg {
+  width: 20px;
+  height: 20px;
+}
+.auction-complete-dialog .dismiss-results-button {
+  border: 1px solid #ccd5d9;
+  background: white;
+  color: #52656f;
+}
 .lucky-wheel-dialog {
   position: relative;
   width: min(720px, 100%);

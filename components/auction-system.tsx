@@ -1421,11 +1421,18 @@ function AdminConsole() {
       message: '',
       error: false,
     }),
-    [downloadedPlayers, setDownloadedPlayers] = useState<Player[] | null>(null);
+    [downloadedPlayers, setDownloadedPlayers] = useState<Player[] | null>(null),
+    [showResultsPrompt, setShowResultsPrompt] = useState(false);
+  const resultsPromptShown = useRef(false);
   const p = s.players[s.player],
     team = s.leader >= 0 ? s.teams[s.leader] : null;
   const auctionRunning =
     s.obsMode === 'auction' && s.projectorMode === 'auction';
+  const allTeamsFull =
+    s.teams.length > 0 &&
+    s.teams.every((_, teamIndex) =>
+      rosterCount(s, teamIndex) >= s.rules.maxPlayers,
+    );
   useEffect(() => {
     const pauseOnExit = () => {
       try {
@@ -2771,6 +2778,15 @@ function AdminConsole() {
     doc.save('auction-results-' + new Date().toISOString().slice(0, 10) + '.pdf');
   };
   useEffect(() => {
+    if (allTeamsFull && !resultsPromptShown.current) {
+      resultsPromptShown.current = true;
+      setShowResultsPrompt(true);
+    } else if (!allTeamsFull) {
+      resultsPromptShown.current = false;
+      setShowResultsPrompt(false);
+    }
+  }, [allTeamsFull]);
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (
@@ -2842,6 +2858,44 @@ function AdminConsole() {
           </a>
         </nav>
       </header>
+      {showResultsPrompt && (
+        <div
+          className="auction-complete-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="auction-complete-title"
+        >
+          <section className="auction-complete-dialog">
+            <Trophy />
+            <small>AUCTION COMPLETE</small>
+            <h2 id="auction-complete-title">All team squads are full</h2>
+            <p>
+              Every team has reached {s.rules.maxPlayers} players. The complete
+              team results are ready to download.
+            </p>
+            <div>
+              <button
+                type="button"
+                className="download-results-button"
+                onClick={async () => {
+                  await exportAuctionResultsPdf();
+                  setShowResultsPrompt(false);
+                }}
+              >
+                <FileDown />
+                Download Results PDF
+              </button>
+              <button
+                type="button"
+                className="dismiss-results-button"
+                onClick={() => setShowResultsPrompt(false)}
+              >
+                Download later
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
       {tab === 'auction' && (
         <div className="admin-grid">
           <section className="admin-main">
